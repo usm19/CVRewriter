@@ -30,6 +30,13 @@ Project scaffold with a full agent-skills setup for Claude Code. The skills belo
 | 20 | marketingskills | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | 49 skills (copywriting, cro, seo-audit, ads, pricing, launch, …) |
 | 21 | humanizer | [blader/humanizer](https://github.com/blader/humanizer) | 1 skill |
 | 22 | social-media-skills | [social-media-skills/skills](https://github.com/social-media-skills/skills) | 106 skills (per-platform growth, captions, calendars, analytics, …) |
+| 23 | career-ops | [santifer/career-ops](https://github.com/santifer/career-ops) | full system vendored at `career-ops/` (see below) |
+
+### career-ops (vendored as a subdirectory, not under `.claude/skills/`)
+
+career-ops is a complete job-search command center — JD evaluation, CV/PDF generation, portal scanning, application tracking, interview prep — where the `career-ops` skill is a thin router driving ~150 Node scripts in its repo root. Its documented install is "clone the repo and run your AI CLI inside it", so it lives here at `career-ops/` with its own `.claude/skills/career-ops`, which Claude Code picks up as a directory-scoped skill when working in that folder.
+
+First use: `cd career-ops && npm install` (deps: playwright for portal scanning, js-yaml, dotenv, @google/generative-ai for optional Gemini eval). Large marketing media in its `docs/` was pruned; everything functional is intact.
 
 ### claude-hud (manual, one command)
 
