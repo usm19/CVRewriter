@@ -338,15 +338,18 @@ input::placeholder, textarea::placeholder { color: var(--text-2); opacity: 0.7; 
   padding: 10px 17px;
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
-    transform 0.15s var(--ease), box-shadow 0.25s ease, opacity 0.2s ease;
+    transform 0.15s var(--ease), box-shadow 0.25s ease, opacity 0.2s ease,
+    background-position 0.45s var(--ease);
 }
 .btn:active { transform: scale(0.97); }
 .btn.primary {
   background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+  background-size: 150% 150%;
+  background-position: 0% 50%;
   color: var(--accent-ink);
   box-shadow: var(--shadow-accent);
 }
-.btn.primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-accent), 0 0 0 3px var(--accent-wash); }
+.btn.primary:hover { transform: translateY(-1px); background-position: 70% 50%; box-shadow: var(--shadow-accent), 0 0 0 3px var(--accent-wash); }
 .btn.primary:active { transform: scale(0.97); }
 .btn.secondary { background: var(--surface); color: var(--text); border-color: var(--line-strong); box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
 .btn.secondary:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
@@ -543,6 +546,8 @@ dialog {
 }
 dialog::backdrop { background: rgb(8 14 11 / 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 dialog[open] { animation: rise-in 0.4s var(--ease); }
+@keyframes fade-in { from { opacity: 0; } }
+dialog[open]::backdrop { animation: fade-in 0.3s ease; }
 dialog h2 { margin-bottom: 8px; }
 
 /* ---------- sentence editor ---------- */
@@ -571,6 +576,16 @@ dialog h2 { margin-bottom: 8px; }
 .edit-changes { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 12px; }
 .edit-changes:empty { display: none; }
 .edit-dlg textarea { margin-top: 12px; line-height: 1.45; }
+@keyframes ta-flash {
+  0% { background: var(--accent-wash); border-color: var(--accent); }
+  100% { background: var(--surface-2); border-color: transparent; }
+}
+.edit-dlg textarea.flash { animation: ta-flash 0.55s var(--ease); }
+@keyframes dlg-in {
+  0% { opacity: 0; transform: translateY(12px) scale(0.97); filter: blur(2px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+.edit-dlg[open] { animation: dlg-in 0.38s var(--ease); }
 .edit-acts { margin-top: 16px; }
 .edit-acts .primary { margin-left: auto; }
 .btn:disabled { opacity: 0.55; cursor: default; }
@@ -632,7 +647,7 @@ dialog h2 { margin-bottom: 8px; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .spin, .skeleton, .ic-spin { animation-duration: 1.5s; }
-  .rise, .ic-swap, .toast, dialog[open] { animation: none; }
+  .rise, .ic-swap, .toast, dialog[open], dialog[open]::backdrop, .edit-dlg textarea.flash { animation: none; }
   .drawer { transition: none; }
   .btn, .btn:hover, .btn:active { transform: none; transition: none; }
   body, .card, .masthead { transition: none; }

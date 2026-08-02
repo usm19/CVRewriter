@@ -348,7 +348,11 @@ function renderResult() {
     stat(current.edits.length, 'sentences reworded for you to check', false),
     ...(r.gaps.length ? [stat(r.gaps.length, 'for you to weigh up', true)] : []),
   );
-  $('result-stats').classList.add('rise');
+  [...$('result-stats').children].forEach((el, i) => {
+    el.classList.add('rise');
+    el.style.animationDelay = `${i * 70}ms`;
+  });
+  introPending = true;
 
   const gaps = $('result-gaps');
   gaps.replaceChildren(...r.gaps.map((g) => { const li = document.createElement('li'); li.textContent = g; return li; }));
@@ -381,13 +385,20 @@ function updatePreview() {
 }
 
 /* Highlight the reworded sentences inside the preview and make each one a
-   button that opens the sentence editor. */
+   button that opens the sentence editor. On the first render of a result the
+   highlights ink themselves in one after another: the engine showing its
+   work, and a lesson that these lines are tappable. */
 const HL_CSS = `
 [data-f].hl{cursor:pointer;border-radius:3px;background:rgba(70,200,207,.16);
   box-shadow:0 0 0 3.5px rgba(70,200,207,.16),inset 0 -1.5px 0 0 #22a7ae;
   transition:background-color .2s ease,box-shadow .2s ease}
 [data-f].hl:hover{background:rgba(70,200,207,.32);box-shadow:0 0 0 3.5px rgba(70,200,207,.32),inset 0 -1.5px 0 0 #0d7e86}
-[data-f].hl:focus-visible{outline:2px solid #0d7e86;outline-offset:3px}`;
+[data-f].hl:focus-visible{outline:2px solid #0d7e86;outline-offset:3px}
+@keyframes hl-in{from{background-color:transparent;box-shadow:0 0 0 3.5px transparent,inset 0 -1.5px 0 0 transparent}}
+[data-f].hl-in{animation:hl-in .55s cubic-bezier(.16,1,.3,1) backwards}
+@media (prefers-reduced-motion:reduce){[data-f].hl-in{animation:none}}`;
+
+let introPending = false;   /* ink the highlights in on the next decoration */
 
 function decoratePreview(frame, texts, changed) {
   const doc = frame.contentDocument;
@@ -398,11 +409,18 @@ function decoratePreview(frame, texts, changed) {
     st.textContent = HL_CSS;
     doc.head.append(st);
   }
+  const intro = introPending;
+  introPending = false;
+  let inkIdx = 0;
   for (const e of current.edits) {
     const el = doc.querySelector(`[data-f="${e.lineId}"]`);
     if (!el) continue;
     const on = changed.has(e.lineId);
     el.classList.toggle('hl', on);
+    if (on && intro) {
+      el.classList.add('hl-in');
+      el.style.animationDelay = `${250 + Math.min(inkIdx++ * 90, 720)}ms`;
+    }
     if (on) {
       el.setAttribute('tabindex', '0');
       el.setAttribute('role', 'button');
@@ -439,16 +457,17 @@ function syncEditor() {
   const box = $('edit-changes');
   box.replaceChildren();
   if (st.mode === 'variant') {
-    for (const c of e.variants[v].changes) {
+    e.variants[v].changes.forEach((c, i) => {
       const row = document.createElement('span');
-      row.className = 'p-change';
+      row.className = 'p-change rise';
+      row.style.animationDelay = `${i * 45}ms`;
       const from = document.createElement('del'); from.textContent = c.from;
       const arr = document.createElement('span'); arr.className = 'arr'; arr.textContent = '→';
       const to = document.createElement('ins'); to.textContent = c.to;
       const why = document.createElement('span'); why.className = 'p-why'; why.textContent = c.why;
       row.append(from, ' ', arr, ' ', to, ' ', why);
       box.append(row);
-    }
+    });
   } else {
     const note = document.createElement('span');
     note.className = 'p-why';
@@ -479,6 +498,10 @@ $('btn-regen').onclick = async () => {
   current.state.set(editing, { mode: 'variant', v });
   swapIcon($('regen-ic'), 'refresh');
   syncEditor();
+  const ta = $('edit-text');
+  ta.classList.remove('flash');
+  void ta.getBoundingClientRect();
+  ta.classList.add('flash');
   updatePreview();
   await persistCurrent();
 };
@@ -670,6 +693,12 @@ async function migrateLegacy() {
 
 async function enterApp() {
   lockUI(false);
+  /* the space unlocking: steps arrive in order, once */
+  ['step-cv', 'step-tailor'].forEach((id, i) => {
+    const el = $(id);
+    el.classList.add('rise');
+    el.style.animationDelay = `${i * 90}ms`;
+  });
   $('user-name').textContent = S.user.name;
   S.cv = await loadEnc('cv');
   S.template = await loadEnc('template');
