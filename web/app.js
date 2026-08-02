@@ -303,7 +303,7 @@ $('btn-tailor').onclick = async () => {
     current = {
       id: `${Date.now()}`, ts: Date.now(),
       title, company, proposals, report,
-      ticked: new Set(proposals.map((p) => p.id)),
+      ticked: new Set(proposals.filter((p) => !p.defaultOff).map((p) => p.id)),
     };
     renderResult();
     await persistCurrent();

@@ -1,17 +1,35 @@
 'use strict';
 import { UK_SPELLINGS, SLOP, GENERIC_TERMS, STOPWORDS } from './rules.js';
+
+/* Seniority nouns say what the role is called, not what it needs; a craft
+   role word (barista, chef, driver) is a real requirement. Only the former
+   are noise in a gap report. */
+const SENIORITY_RE = /\b(manager|assistant|supervisor|coordinator|administrator|executive|officer|advisor|adviser|analyst|specialist|consultant|associate|apprentice|leader|lead|director|head|operative|steward|colleague|member)\b/i;
 import { extractJdTerms, analyseCoverage, guessTitleCompany, extractCredentials, tokenize, stem } from './nlp.js';
+import { inflectionsOf, inflectPhrase, VERBS, voiceProfile } from './voice.js';
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const phraseRe = (phrase, flags = 'gi') =>
   new RegExp(`(?<![A-Za-z0-9])${escapeRe(phrase).replace(/\\?\s+/g, '[\\s-]+')}(?![A-Za-z0-9])`, flags);
 
-/* Give the replacement the capitalisation of what it replaces. */
+/* Give the replacement the capitalisation of what it replaces, including the
+   owner's Title Case habit on skill lists. */
 function matchCase(found, replacement) {
   if (found === found.toUpperCase() && found.length > 2) return replacement.toUpperCase();
+  const words = found.split(/[\s-]+/);
+  if (words.length > 1 && words.every((w) => /^[A-Z0-9]/.test(w))) {
+    return replacement.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
   if (/^[A-Z]/.test(found)) return replacement.charAt(0).toUpperCase() + replacement.slice(1);
   return replacement;
 }
+
+/* A short line whose every word is capitalised is a heading or a skill-list
+   entry, not a proper-noun run. */
+const isTitleLine = (text) => {
+  const words = text.trim().split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
+  return words.length > 0 && words.length <= 6 && words.every((w) => /^[A-Z0-9("']/.test(w));
+};
 
 /*
  * Build the proposal list. Three kinds, all word-level, all opt-in:
@@ -25,35 +43,54 @@ export function buildProposals(lines, jdText, jobUrl) {
   const cvText = lines.map((l) => l.text).join('\n');
   const jdTerms = extractJdTerms(jdText);
   const { covered, viaSynonym, gaps } = analyseCoverage(jdTerms, cvText);
+  const profile = voiceProfile(lines);
   const proposals = [];
   let seq = 0;
-  const add = (line, kind, find, replace, why) => {
+  const dupRe = /\b([A-Za-z]+) \1\b/i;
+  const add = (line, kind, find, replace, why, opts = {}) => {
     const m = find.exec(line.text);
     find.lastIndex = 0;
     if (!m) return;
+    /* proper-noun guard: a capitalised match mid-sentence beside another
+       capitalised word is a name, not vocabulary */
+    if (kind === 'mirror' && /^[A-Z]/.test(m[0]) && m.index > 0 && !isTitleLine(line.text)) {
+      const before = line.text.slice(0, m.index).trimEnd();
+      const nextWord = line.text.slice(m.index + m[0].length).trimStart().split(/\s+/)[0] || '';
+      const prevWord = before.split(/\s+/).pop() || '';
+      if (!/[.!?:]$/.test(before) && (/^[A-Z][a-z]/.test(nextWord) || /^[A-Z][a-z]/.test(prevWord))) return;
+    }
     const replaced = line.text.replace(find, (f) => matchCase(f, replace));
     if (replaced === line.text) return;
-    proposals.push({ id: `p${++seq}`, lineId: line.id, kind, findSrc: find.source, replace, why, before: line.text, after: replaced });
+    if (dupRe.test(replaced) && !dupRe.test(line.text)) return;   /* "service service" */
+    proposals.push({ id: `p${++seq}`, lineId: line.id, kind, findSrc: find.source, replace, why, before: line.text, after: replaced, ...opts });
   };
 
-  /* mirror the listing's terminology where the CV shows the same thing */
+  /* Mirror the listing's terminology where the CV shows the same thing, in
+     the grammatical form the CV already uses. */
   for (const t of viaSynonym) {
-    const jdKeyStems = new Set(t.key.split(' '));
+    const jdVariant = t.group.variants.find((v) => tokenize(v).map(stem).join(' ') === t.key) || t.display;
     for (const variant of t.group.variants) {
-      const vStems = tokenize(variant).map((w) => w).join(' ');
-      if (variant.toLowerCase() === t.display.toLowerCase()) continue;
-      const re = phraseRe(variant);
-      for (const line of lines) {
-        if (re.test(line.text)) {
+      if (variant === jdVariant) continue;
+      for (const [surface, info] of inflectionsOf(variant)) {
+        let replace;
+        if (info.form === 'base') replace = t.display;
+        else if (VERBS.has(jdVariant.split(' ')[0])) replace = inflectPhrase(jdVariant, info.form);
+        else continue;                     /* cannot inflect the listing's term to match */
+        if (replace.toLowerCase() === surface.toLowerCase()) continue;
+        const re = phraseRe(surface);
+        for (const line of lines) {
+          if (re.test(line.text)) { re.lastIndex = 0; add(line, 'mirror', re, replace, `the listing says "${t.display}"`); }
           re.lastIndex = 0;
-          add(line, 'mirror', re, t.display, `the listing says "${t.display}"`);
         }
-        re.lastIndex = 0;
       }
     }
   }
 
-  /* UK spellings and plain-wording, dictionary passes */
+  /* UK spellings and plain-wording, dictionary passes. A word the owner uses
+     repeatedly is their voice (career-ops Voice DNA): still offered, but off
+     by default. */
+  const usesOften = (phrase) =>
+    (phrase.includes(' ') ? profile.phraseCount(phrase) : profile.count(phrase)) >= 2;
   for (const line of lines) {
     for (const [us, uk] of Object.entries(UK_SPELLINGS)) {
       const re = phraseRe(us);
@@ -61,7 +98,10 @@ export function buildProposals(lines, jdText, jobUrl) {
     }
     for (const [tell, plain] of Object.entries(SLOP)) {
       const re = phraseRe(tell);
-      if (re.test(line.text)) { re.lastIndex = 0; add(line, 'plain', re, plain, 'plainer wording'); }
+      if (!re.test(line.text)) continue;
+      re.lastIndex = 0;
+      if (usesOften(tell)) add(line, 'plain', re, plain, 'appears often in your CV, so it may be your voice', { defaultOff: true });
+      else add(line, 'plain', re, plain, 'plainer wording');
     }
   }
 
@@ -101,6 +141,7 @@ export function buildProposals(lines, jdText, jobUrl) {
   const credStems = new Set(creds.flatMap((c) => tokenize(c).map(stem)));
   const cleanGaps = dedupeByStems(gaps.filter((t) =>
     !GENERIC_TERMS.has(t.display) &&
+    (t.words.length > 1 || !SENIORITY_RE.test(t.display)) &&
     t.words.every((w) => !STOPWORDS.has(w) && !COMMON.has(w) && !adverbLike(w)) &&
     t.key.split(' ').every((s) => !cvStems.has(s) && !credStems.has(s)) &&
     (t.words.length > 1 ? t.score >= 4.4 : t.score >= 6)));

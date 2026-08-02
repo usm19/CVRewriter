@@ -1,5 +1,6 @@
 'use strict';
 import { STOPWORDS, GENERIC_TERMS, SYNONYMS, TECH, TECH_ALIASES, REQUIREMENT_HEADER_RE, NON_REQUIREMENT_HEADER_RE, ROLE_WORDS } from './rules.js';
+import { inflectionsOf } from './voice.js';
 
 /* ---------- tokenising ---------- */
 export function tokenize(text) {
@@ -51,8 +52,21 @@ export function stem(w) {
 const stemKey = (phrase) => tokenize(phrase).map(stem).join(' ');
 
 /* ---------- synonym lattice ---------- */
-const GROUP_OF = new Map();   /* stemKey(variant) -> group index */
-SYNONYMS.forEach((group, gi) => group.forEach((v) => GROUP_OF.set(stemKey(v), gi)));
+/* Indexed over every generated inflection surface, so an irregular form in
+   a listing ("oversaw") still finds its group. */
+const GROUP_OF = new Map();   /* stemKey(surface) -> group index */
+SYNONYMS.forEach((group, gi) => group.forEach((v) => {
+  for (const surface of inflectionsOf(v).keys()) GROUP_OF.set(stemKey(surface), gi);
+}));
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const surfaceRe = (s) => new RegExp(`(?<![a-z0-9])${escapeRe(s).replace(/\\?\s+/g, '[\\s-]+')}(?![a-z0-9])`);
+
+/* Does the CV show this group in any of its variants' inflections? */
+export function groupInText(group, textLower) {
+  return group.variants.some((v) =>
+    [...inflectionsOf(v).keys()].some((s) => surfaceRe(s).test(textLower)));
+}
 
 const TECH_CANON = new Map(); /* lowercase -> display */
 TECH.forEach((t) => TECH_CANON.set(t.toLowerCase(), t));
@@ -64,13 +78,15 @@ export function synonymGroup(phrase) {
 }
 
 /* ---------- job listing analysis ---------- */
+const INLINE_REQ_RE = /^\s*(essential|desirable|must[- ]haves?|required|preferred)\b\s*[:\-]/i;
+
 function sectionWeights(lines) {
   const weights = [];
   let inReq = false;
   for (const line of lines) {
     if (REQUIREMENT_HEADER_RE.test(line)) inReq = true;
     else if (NON_REQUIREMENT_HEADER_RE.test(line)) inReq = false;
-    weights.push(inReq ? 3 : 1);
+    weights.push(INLINE_REQ_RE.test(line) ? 4 : inReq ? 3 : 1);
   }
   return weights;
 }
@@ -128,8 +144,17 @@ export function extractJdTerms(jdText) {
     scores.set(key, cur);
   };
 
+  /* the job title's own words are what the listing is most about */
+  const titleLine = lines.slice(0, 8).find((l) => l.trim() && l.trim().length < 80 && ROLE_WORDS.test(l));
+  if (titleLine) {
+    for (const tok of tokenize(titleLine.split(/,| at | \| /)[0])) {
+      if (!STOPWORDS.has(tok)) bump(tok, 6);
+    }
+  }
+
   lines.forEach((line, i) => {
     if (REQUIREMENT_HEADER_RE.test(line) || NON_REQUIREMENT_HEADER_RE.test(line)) return;
+    if (line === titleLine) return;
     const w = weights[i];
     const toks = tokenize(line).filter((t) => !/^\d+$/.test(t));
     for (let j = 0; j < toks.length; j++) {
@@ -161,11 +186,12 @@ export function extractJdTerms(jdText) {
 export function analyseCoverage(jdTerms, cvText) {
   const cvStems = new Set(tokenize(cvText).map(stem));
   const cvKey = ' ' + tokenize(cvText).map(stem).join(' ') + ' ';
+  const cvLower = cvText.toLowerCase();
   const covered = [], viaSynonym = [], gaps = [];
   for (const t of jdTerms) {
     if (cvKey.includes(' ' + t.key + ' ') || (t.words.length === 1 && cvStems.has(t.key))) { covered.push(t); continue; }
     const g = synonymGroup(t.display);
-    if (g && g.variants.some((v) => cvKey.includes(' ' + stemKey(v) + ' '))) { viaSynonym.push({ ...t, group: g }); continue; }
+    if (g && groupInText(g, cvLower)) { viaSynonym.push({ ...t, group: g }); continue; }
     gaps.push(t);
   }
   return { covered, viaSynonym, gaps };

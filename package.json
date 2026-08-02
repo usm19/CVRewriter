@@ -1,0 +1,8 @@
+{
+  "name": "cvrewriter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test web/engine/tests/*.test.mjs"
+  }
+}

@@ -37,6 +37,11 @@ export const UK_SPELLINGS = {
   resume: 'CV', 'résumé': 'CV', resumes: 'CVs',
   defense: 'defence', offense: 'offence', practiced: 'practised', practicing: 'practising',
   aging: 'ageing', gray: 'grey', jewelry: 'jewellery', checkbook: 'chequebook', checks: 'cheques',
+  'driving license': 'driving licence', "driver's license": "driver's licence",
+  'best practise': 'best practice', 'best practises': 'best practices',
+  'training program': 'training programme', 'training programs': 'training programmes',
+  'development program': 'development programme', 'graduate program': 'graduate programme',
+  'apprenticeship program': 'apprenticeship programme', 'mentoring program': 'mentoring programme',
 };
 
 /* AI-tell words with plain replacements. Suggestions only; if the CV's owner
@@ -57,6 +62,14 @@ export const SLOP = {
   'proven track record of': 'record of',
   'responsible for managing': 'managed',
   'responsible for overseeing': 'oversaw',
+  harnessed: 'used', harness: 'use',
+  garnered: 'earned', garner: 'earn',
+  commenced: 'started', commence: 'start',
+  meticulously: 'carefully', seamlessly: 'smoothly',
+  'in excess of': 'over',
+  'prior to': 'before',
+  'a wide range of': 'many',
+  'first and foremost': 'first',
 };
 
 /* Words that carry no matching signal. Superset of career-ops' stopword sets. */
@@ -70,20 +83,20 @@ export const GENERIC_TERMS = new Set(('communication passionate motivated enthus
  * word, never the claim. First entry is the group's display name. */
 export const SYNONYMS = [
   /* people management */
-  ['managed', 'supervised', 'oversaw', 'ran', 'headed', 'led'],
+  ['manage', 'supervise', 'oversee', 'run', 'head', 'lead'],
   ['line management', 'people management', 'staff management', 'team management'],
   ['team leader', 'team lead', 'supervisor', 'shift leader', 'shift supervisor'],
-  ['trained', 'coached', 'mentored', 'onboarded', 'inducted', 'upskilled'],
+  ['train', 'coach', 'mentor', 'onboard', 'induct', 'upskill'],
   ['training', 'coaching', 'mentoring', 'onboarding', 'induction'],
-  ['recruited', 'hired', 'interviewed and hired'],
+  ['recruit', 'hire'],
   ['appraisals', 'performance reviews', 'performance management', 'one to ones', '1-2-1s'],
-  ['delegated', 'assigned', 'allocated'],
+  ['delegate', 'assign', 'allocate'],
   /* scheduling */
-  ['rotas', 'rota', 'staff scheduling', 'shift planning', 'shift patterns', 'scheduling', 'workforce planning'],
+  ['rota', 'roster', 'rostering', 'staff scheduling', 'shift planning', 'shift patterns', 'scheduling', 'workforce planning'],
   /* customers */
-  ['customers', 'clients', 'guests', 'service users', 'patrons', 'shoppers'],
+  ['customer', 'client', 'guest', 'service user', 'patron', 'shopper'],
   ['customer service', 'customer care', 'client service', 'guest experience', 'customer experience', 'customer support'],
-  ['complaints', 'customer complaints', 'escalations', 'customer issues'],
+  ['complaint', 'customer complaint', 'escalation', 'customer issue'],
   ['front of house', 'front-of-house', 'foh'],
   /* retail & stock */
   ['tills', 'checkouts', 'point of sale', 'pos', 'epos', 'cash registers'],
@@ -111,9 +124,9 @@ export const SYNONYMS = [
   ['microsoft office', 'ms office', 'office 365', 'microsoft 365'],
   /* communication & collaboration */
   ['stakeholders', 'internal and external contacts', 'partners', 'colleagues and clients'],
-  ['liaised with', 'worked with', 'coordinated with', 'partnered with', 'collaborated with'],
-  ['presented', 'delivered presentations', 'pitched', 'briefed'],
-  ['negotiated', 'agreed terms', 'secured'],
+  ['liaise with', 'work with', 'coordinate with', 'partner with', 'collaborate with'],
+  ['present', 'pitch', 'brief', 'deliver presentations'],
+  ['negotiate', 'secure'],
   /* projects & process */
   ['projects', 'project work', 'initiatives', 'programmes of work'],
   ['project management', 'project delivery', 'project coordination'],
@@ -156,11 +169,65 @@ export const SYNONYMS = [
   ['send', 'sen', 'special educational needs', 'additional needs'],
   ['assessment', 'marking', 'grading', 'feedback on work'],
   /* general verbs of achievement */
-  ['improved', 'raised', 'lifted', 'strengthened', 'boosted'],
-  ['reduced', 'cut', 'lowered', 'brought down'],
-  ['delivered', 'achieved', 'completed', 'brought in'],
-  ['created', 'built', 'set up', 'established', 'introduced', 'launched'],
-  ['maintained', 'kept', 'upheld', 'sustained'],
+  ['improve', 'raise', 'lift', 'strengthen', 'boost'],
+  ['reduce', 'cut', 'lower', 'bring down'],
+  ['deliver', 'achieve', 'complete', 'bring in'],
+  ['create', 'build', 'set up', 'establish', 'introduce', 'launch'],
+  ['maintain', 'keep', 'uphold', 'sustain'],
+  /* IT support */
+  ['it support', 'technical support', 'helpdesk', 'service desk', 'first line support', '1st line support'],
+  ['ticket', 'support ticket', 'service request', 'incident ticket'],
+  ['fault finding', 'fault diagnosis', 'diagnostics'],
+  ['remote support', 'remote assistance'],
+  /* call centre */
+  ['inbound calls', 'incoming calls'],
+  ['outbound calls', 'outgoing calls'],
+  ['call handling', 'phone handling', 'telephone handling'],
+  ['call centre', 'contact centre', 'call center'],
+  /* warehouse and driving */
+  ['multi-drop', 'multidrop', 'multi drop deliveries'],
+  ['manifest', 'delivery manifest', 'run sheet'],
+  ['vehicle checks', 'walkaround checks', 'daily vehicle checks'],
+  ['stock rotation', 'date rotation', 'fifo'],
+  ['handover', 'shift handover'],
+  /* construction and security */
+  ['method statements', 'rams'],
+  ['cctv', 'cctv monitoring', 'camera monitoring'],
+  ['patrol', 'security patrol', 'site patrol'],
+  ['incident report', 'incident reporting', 'incident log'],
+  /* care */
+  ['personal care', 'intimate care'],
+  ['daily living', 'activities of daily living', 'adls'],
+  ['medication records', 'mar charts'],
+  /* office */
+  ['travel booking', 'travel arrangements', 'booking travel'],
+  ['expense claim', 'expense processing', 'staff expenses'],
+  ['audio typing', 'dictation', 'transcription'],
+  /* sales and marketing */
+  ['sales pipeline', 'pipeline management', 'sales funnel'],
+  ['cold calling', 'prospecting calls', 'cold outreach'],
+  ['product demonstrations', 'demos', 'product demos'],
+  ['contract renewals', 'renewals'],
+  ['customer churn', 'churn', 'attrition'],
+  ['split testing', 'a/b testing'],
+  ['search engine optimisation', 'seo'],
+  ['paid search', 'ppc'],
+  ['user experience', 'ux'],
+  /* finance */
+  ['credit control', 'chasing overdue invoices'],
+  ['vat returns', 'vat filings'],
+  ['month end', 'month-end close', 'monthly close'],
+  ['petty cash', 'cash floats'],
+  /* hospitality and beauty */
+  ['barista', 'coffee preparation', 'hot drinks'],
+  ['covers', 'service covers'],
+  ['beauty treatments', 'treatments'],
+  /* education and events */
+  ['parents evenings', 'parent consultations'],
+  ['schemes of work', 'curriculum plans'],
+  ['event setup', 'event set up', 'set-up and breakdown'],
+  ['guest list', 'guestlist management'],
+  ['fundraising', 'fund raising'],
 ];
 
 /* Technology skills and exact aliases, after career-ops skill-extract.mjs.
