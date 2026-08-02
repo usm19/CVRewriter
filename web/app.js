@@ -2,6 +2,7 @@
 import { decomposePdf, registerFonts } from './engine/pdf-extract.js';
 import { buildTemplateHtml, lineFits, guessOwnerName } from './engine/render.js';
 import { buildProposals, applyProposals } from './engine/tailor.js';
+import { createProfileKeys, unlockDek, encryptJson, decryptJson, sessionValid, SESSION_DAYS } from './crypto.js';
 
 const JD_MAX = 28000;
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -10,10 +11,12 @@ const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 const db = (() => {
   let handle;
   const open = () => handle ||= new Promise((res, rej) => {
-    const rq = indexedDB.open('cvrewriter', 1);
+    const rq = indexedDB.open('cvrewriter', 2);
     rq.onupgradeneeded = () => {
-      rq.result.createObjectStore('kv');
-      rq.result.createObjectStore('history', { keyPath: 'id' });
+      const d = rq.result;
+      if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv');
+      if (!d.objectStoreNames.contains('history')) d.createObjectStore('history', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('profiles')) d.createObjectStore('profiles', { keyPath: 'id' });
     };
     rq.onsuccess = () => res(rq.result);
     rq.onerror = () => rej(rq.error);
@@ -34,13 +37,24 @@ const db = (() => {
     histAll: () => tx('history', 'readonly', (s) => s.getAll()),
     histPut: (r) => tx('history', 'readwrite', (s) => s.put(r)),
     histDel: (id) => tx('history', 'readwrite', (s) => s.delete(id)),
+    kvKeys: () => tx('kv', 'readonly', (s) => s.getAllKeys()),
+    profAll: () => tx('profiles', 'readonly', (s) => s.getAll()),
+    profPut: (p) => tx('profiles', 'readwrite', (s) => s.put(p)),
+    profDel: (id) => tx('profiles', 'readwrite', (s) => s.delete(id)),
     wipe: async () => { (await open()).close(); handle = null; return new Promise((res) => { const rq = indexedDB.deleteDatabase('cvrewriter'); rq.onsuccess = rq.onerror = rq.onblocked = () => res(); }); },
   };
 })();
 
 /* ---------- state ---------- */
-const S = { cv: null, template: null, history: [] };
+const S = { cv: null, template: null, history: [], user: null };
 let current = null;   /* the open tailoring session */
+let authSel = null;   /* profile selected on the unlock screen */
+
+const b64b = (bytes) => btoa(String.fromCharCode(...bytes));
+const unb64b = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+const pk = (k) => `${S.user.id}:${k}`;
+const saveEnc = async (k, obj) => db.set(pk(k), await encryptJson(S.user.dek, obj));
+const loadEnc = async (k) => { const b = await db.get(pk(k)); return b ? decryptJson(S.user.dek, b) : null; };
 
 const $ = (id) => document.getElementById(id);
 const show = (el, on = true) => { el.hidden = !on; };
@@ -229,10 +243,10 @@ $('in-cv').addEventListener('change', async (e) => {
     const model = await decomposePdf(bytes);
     model.approved = false;
     S.cv = { name: file.name, type: 'application/pdf', b64 };
-    await db.set('cv', S.cv);
+    await saveEnc('cv', S.cv);
     await registerFonts(model.fonts);
     S.template = model;
-    await db.set('template', model);
+    await saveEnc('template', model);
     show($('template-review'));
     renderPreview($('frame-template'), buildTemplateHtml(model));
     swapIcon($('upload-ic'), 'check');
@@ -265,7 +279,7 @@ $('btn-view-original').onclick = () => {
 };
 $('btn-approve').onclick = async () => {
   S.template.approved = true;
-  await db.set('template', S.template);
+  await saveEnc('template', S.template);
   show($('template-review'), false);
   renderGates();
   toast('Working copy saved. Paste a job link below.');
@@ -429,7 +443,7 @@ async function persistCurrent() {
     html, report: current.report,
     proposals: current.proposals, ticked: [...current.ticked],
   };
-  await db.histPut(rec);
+  await db.histPut({ id: pk(rec.id), pid: S.user.id, blob: await encryptJson(S.user.dek, rec) });
   S.history = [rec, ...S.history.filter((h) => h.id !== current.id)];
 }
 
@@ -440,7 +454,7 @@ const pdfName = () => {
 };
 $('btn-pdf').onclick = () => { if (current) printCV(currentHtml().html, pdfName()); };
 $('btn-discard').onclick = async () => {
-  if (current) { await db.histDel(current.id); S.history = S.history.filter((h) => h.id !== current.id); }
+  if (current) { await db.histDel(pk(current.id)); S.history = S.history.filter((h) => h.id !== current.id); }
   current = null;
   show($('result'), false);
   renderHistory();
@@ -470,7 +484,7 @@ function renderHistory() {
     del.setAttribute('aria-label', 'Delete this version');
     del.append(mkIcon('trash', 'ic sm'));
     del.onclick = async () => {
-      await db.histDel(r.id);
+      await db.histDel(pk(r.id));
       S.history = S.history.filter((h) => h.id !== r.id);
       if (current?.id === r.id) { current = null; show($('result'), false); }
       renderHistory();
@@ -484,10 +498,159 @@ function renderHistory() {
 /* ---------- settings ---------- */
 $('btn-settings').onclick = () => $('dlg-settings').showModal();
 $('btn-settings-close').onclick = () => $('dlg-settings').close();
+$('btn-user').onclick = () => $('dlg-settings').showModal();
+$('btn-lock').onclick = async () => {
+  $('dlg-settings').close();
+  await lock();
+};
 $('btn-wipe').onclick = async () => {
-  if (!confirm('Delete your CV, its working copy and all tailored versions from this device?')) return;
-  await db.wipe();
-  location.reload();
+  if (!confirm(`Delete ${S.user.name}'s space and every CV in it? This cannot be undone.`)) return;
+  $('dlg-settings').close();
+  await deleteSpace(S.user.id);
+  await lock();
+};
+
+async function deleteSpace(pid) {
+  for (const key of await db.kvKeys()) if (String(key).startsWith(`${pid}:`)) await db.del(key);
+  for (const r of await db.histAll()) if (r.pid === pid) await db.histDel(r.id);
+  await db.profDel(pid);
+  const session = await db.get('session');
+  if (session?.pid === pid) await db.del('session');
+}
+
+/* ---------- spaces: lock, unlock, enter ---------- */
+function lockUI(locked) {
+  show($('auth'), locked);
+  for (const id of ['step-cv', 'step-tailor', 'result', 'step-history']) show($(id), false);
+  if (!locked) { show($('step-cv')); show($('step-tailor')); }
+  show($('btn-user'), !locked);
+  show($('btn-settings'), !locked);
+}
+
+async function renderAuth() {
+  lockUI(true);
+  const profiles = (await db.profAll()).sort((x, y) => x.createdAt - y.createdAt);
+  const creating = profiles.length === 0 || authSel === 'new';
+  $('auth-title').textContent = creating ? (profiles.length ? 'A new space' : 'Create your space') : 'Who is this?';
+  $('btn-auth-label').textContent = creating ? 'Create my space' : 'Unlock my space';
+  show($('name-row'), creating);
+  show($('btn-new-space'), !creating);
+  const list = $('space-list');
+  list.replaceChildren();
+  if (!creating) {
+    for (const p of profiles) {
+      const li = document.createElement('li');
+      li.classList.toggle('selected', authSel === p.id);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'space';
+      btn.append(mkIcon('user', 'ic sm'), document.createTextNode(p.name));
+      btn.onclick = () => { authSel = p.id; renderAuth(); $('in-pass').focus(); };
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn ghost small iconbtn del';
+      del.setAttribute('aria-label', `Delete ${p.name}'s space`);
+      del.append(mkIcon('trash', 'ic sm'));
+      del.onclick = async () => {
+        if (!confirm(`Delete ${p.name}'s space and every CV in it? This cannot be undone.`)) return;
+        await deleteSpace(p.id);
+        if (authSel === p.id) authSel = null;
+        renderAuth();
+      };
+      btn.append(del);
+      li.append(btn);
+      list.append(li);
+    }
+    if (!authSel && profiles.length === 1) authSel = profiles[0].id;
+  }
+  fieldError('auth-error');
+}
+
+async function lock() {
+  await db.del('session');
+  S.user = null; S.cv = null; S.template = null; S.history = []; current = null;
+  authSel = null;
+  $('in-pass').value = ''; $('in-name').value = '';
+  show($('template-review'), false);
+  show($('cv-chip'), false);
+  await renderAuth();
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function startSession(prof, dek) {
+  await db.set('session', { pid: prof.id, dek: b64b(dek), expiresAt: Date.now() + SESSION_DAYS * 86400000 });
+  S.user = { id: prof.id, name: prof.name, dek };
+}
+
+/* Fold any data saved before spaces existed into the first space created. */
+async function migrateLegacy() {
+  const cv = await db.get('cv'), tpl = await db.get('template');
+  if (cv && !cv.iv) { await saveEnc('cv', cv); await db.del('cv'); }
+  if (tpl && !tpl.iv) { await saveEnc('template', tpl); await db.del('template'); }
+  for (const r of await db.histAll()) {
+    if (!r.pid && r.title) { await db.histPut({ id: pk(r.id), pid: S.user.id, blob: await encryptJson(S.user.dek, r) }); await db.histDel(r.id); }
+  }
+}
+
+async function enterApp() {
+  lockUI(false);
+  $('user-name').textContent = S.user.name;
+  S.cv = await loadEnc('cv');
+  S.template = await loadEnc('template');
+  const mine = (await db.histAll()).filter((r) => r.pid === S.user.id);
+  S.history = (await Promise.all(mine.map(async (r) => {
+    try { return await decryptJson(S.user.dek, r.blob); } catch { return null; }
+  }))).filter(Boolean).sort((x, y) => y.ts - x.ts);
+  if (S.template) await registerFonts(S.template.fonts);
+  if (S.template && !S.template.approved) {
+    show($('template-review'));
+    renderPreview($('frame-template'), buildTemplateHtml(S.template));
+  }
+  if (S.cv) { $('cv-chip').replaceChildren(mkIcon('file', 'ic sm'), document.createTextNode(S.cv.name)); show($('cv-chip')); }
+  renderGates();
+  renderHistory();
+}
+
+$('btn-new-space').onclick = () => { authSel = 'new'; renderAuth(); $('in-name').focus(); };
+$('in-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-auth').click(); });
+
+$('btn-auth').onclick = async () => {
+  const pass = $('in-pass').value;
+  const profiles = await db.profAll();
+  const creating = profiles.length === 0 || authSel === 'new';
+  if (pass.length < 8) { fieldError('auth-error', 'The passphrase needs at least 8 characters.'); return; }
+  $('btn-auth').disabled = true;
+  swapIcon($('auth-ic'), 'loader', { spin: true });
+  try {
+    if (creating) {
+      const name = $('in-name').value.trim();
+      if (!name) { fieldError('auth-error', 'Add your name so this space has an owner.'); return; }
+      if (profiles.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+        fieldError('auth-error', 'A space with that name already exists on this device.'); return;
+      }
+      const keys = await createProfileKeys(pass);
+      const prof = { id: crypto.randomUUID(), name, createdAt: Date.now(), ...keys };
+      await db.profPut(prof);
+      const dek = await unlockDek(pass, prof);
+      await startSession(prof, dek);
+      if (profiles.length === 0) await migrateLegacy();
+      toast(`Welcome, ${name}. This space is yours.`);
+    } else {
+      const prof = profiles.find((p) => p.id === authSel);
+      if (!prof) { fieldError('auth-error', 'Choose whose space to unlock.'); return; }
+      let dek;
+      try { dek = await unlockDek(pass, prof); }
+      catch { fieldError('auth-error', 'That passphrase does not open this space.'); return; }
+      await startSession(prof, dek);
+      toast(`Welcome back, ${prof.name}.`);
+    }
+    $('in-pass').value = ''; $('in-name').value = '';
+    authSel = null;
+    await enterApp();
+  } finally {
+    swapIcon($('auth-ic'), 'lock');
+    $('btn-auth').disabled = false;
+  }
 };
 
 /* ---------- boot ---------- */
@@ -497,17 +660,15 @@ new IntersectionObserver(([e]) => {
 }).observe($('top-sentinel'));
 
 (async function init() {
-  S.cv = (await db.get('cv')) || null;
-  S.template = (await db.get('template')) || null;
-  S.history = ((await db.histAll()) || []).sort((a, b) => b.ts - a.ts);
-  if (S.template) {
-    await registerFonts(S.template.fonts);
-    if (!S.template.approved) {
-      show($('template-review'));
-      renderPreview($('frame-template'), buildTemplateHtml(S.template));
-    }
+  const session = await db.get('session');
+  const profiles = await db.profAll();
+  const prof = sessionValid(session, Date.now()) && profiles.find((p) => p.id === session.pid);
+  if (prof) {
+    S.user = { id: prof.id, name: prof.name, dek: unb64b(session.dek) };
+    await enterApp();
+  } else {
+    if (session) await db.del('session');
+    await renderAuth();
   }
-  renderGates();
-  renderHistory();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
