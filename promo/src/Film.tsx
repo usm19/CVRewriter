@@ -25,16 +25,16 @@ const TARGETS: Record<"wide" | "tall", Record<string, Target>> = {
     editor: { x: 2610, y: -20, s: 2.85 },
     honesty: { x: 2760, y: 130, s: 1.02 },
     private: { x: 5200, y: -80, s: 1.0 },
-    finish: { x: 7800, y: 60, s: 1.0 },
+    finish: { x: 7440, y: 60, s: 1.0 },
     cta: { x: 10400, y: 0, s: 1.0 },
   },
   tall: {
     hook: { x: 0, y: -10, s: 1.0 },
-    upload: { x: 2600, y: 190, s: 1.3 },
+    upload: { x: 2600, y: 55, s: 1.3 },
     link: { x: 2600, y: -150, s: 2.3 },
-    engine: { x: 2600, y: 210, s: 1.26 },
+    engine: { x: 2600, y: 50, s: 1.26 },
     editor: { x: 2600, y: 40, s: 2.5 },
-    honesty: { x: 2600, y: 260, s: 1.24 },
+    honesty: { x: 2600, y: 55, s: 1.24 },
     private: { x: 5200, y: -140, s: 1.28 },
     finish: { x: 7800, y: 40, s: 1.24 },
     cta: { x: 10400, y: -30, s: 1.12 },
@@ -133,14 +133,14 @@ const Sound: React.FC = () => {
         </Sequence>
       ))}
       {(["upload", "link", "engine", "editor", "honesty", "private", "finish", "cta"] as const).map((b) =>
-        fx("fx-whoosh.wav", B[b].start - 4, 0.4, `wh-${b}`),
+        fx("fx-whoosh.wav", B[b].start - 4, 0.32, `wh-${b}`),
       )}
-      {fx("fx-tap.wav", B.upload.vo + 34, 0.75, "tap-choose")}
-      {fx("fx-tap.wav", B.upload.end - 26, 0.7, "tap-approve")}
-      {fx("fx-tap.wav", B.link.end - 18, 0.8, "tap-tailor")}
-      {fx("fx-tap.wav", B.editor.vo + 16, 0.8, "tap-row")}
-      {fx("fx-tap.wav", B.editor.vo + 118, 0.75, "tap-regen")}
-      {fx("fx-tap.wav", B.finish.start + 86, 0.7, "tap-icon")}
+      {fx("fx-tap.wav", B.upload.vo + 34, 0.55, "tap-choose")}
+      {fx("fx-tap.wav", B.upload.end - 26, 0.55, "tap-approve")}
+      {fx("fx-tap.wav", B.link.end - 18, 0.6, "tap-tailor")}
+      {fx("fx-tap.wav", B.editor.vo + 16, 0.6, "tap-row")}
+      {fx("fx-tap.wav", B.editor.vo + 118, 0.55, "tap-regen")}
+      {fx("fx-tap.wav", B.finish.start + 86, 0.55, "tap-icon")}
       {fx("fx-slide.wav", B.upload.vo + 44, 0.5, "slide-chip")}
       {fx("fx-slide.wav", B.editor.vo + 26, 0.55, "slide-sheet")}
       {fx("fx-slide.wav", B.finish.start + 12, 0.5, "slide-pdf")}

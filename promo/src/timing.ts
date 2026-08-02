@@ -5,24 +5,24 @@
 export const FPS = 30;
 
 const VO_SECONDS: Record<string, number> = {
-  hook: 4.43,
-  upload: 9.69,
-  link: 3.56,
-  engine: 10.26,
-  editor: 9.21,
-  honesty: 5.59,
-  private: 8.87,
-  finish: 6.77,
-  cta: 8.53,
+  hook: 4.1,
+  upload: 8.83,
+  link: 3.32,
+  engine: 8.56,
+  editor: 8.77,
+  honesty: 4.11,
+  private: 6.0,
+  finish: 4.79,
+  cta: 8.16,
 };
 
-const LEAD = 0.65;
-const TAIL = 1.0;
+const LEAD = 0.45;
+const TAIL = 0.55;
 export const BEAT_ORDER = ["hook", "upload", "link", "engine", "editor", "honesty", "private", "finish", "cta"] as const;
 export type BeatName = (typeof BEAT_ORDER)[number];
 
 export const BEATS = {} as Record<BeatName, { start: number; vo: number; voLen: number; len: number; end: number }>;
-let t = 0.4;
+let t = 0.3;
 for (const name of BEAT_ORDER) {
   const len = LEAD + VO_SECONDS[name] + TAIL;
   BEATS[name] = {
@@ -34,4 +34,4 @@ for (const name of BEAT_ORDER) {
   };
   t += len;
 }
-export const TOTAL = Math.round((t + 0.6) * FPS);
+export const TOTAL = Math.round((t + 0.5) * FPS);

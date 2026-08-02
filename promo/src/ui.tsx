@@ -122,10 +122,14 @@ export const Spinner: React.FC<{ size: number; color: string }> = ({ size, color
   );
 };
 
-/* A miniature CV page. lines marks which rows show swapped (teal) text. */
-export const MiniPage: React.FC<{ u: number; w: number; swapped?: number[]; from?: number }> = ({ u, w, swapped = [], from = 0 }) => {
+/* A miniature CV page. lines marks which rows show swapped (teal) text.
+   glowRow highlights one main-column row exactly, at glowPulse opacity. */
+export const MiniPage: React.FC<{ u: number; w: number; swapped?: number[]; from?: number; glowRow?: number; glowPulse?: number }> = ({ u, w, swapped = [], from = 0, glowRow, glowPulse = 0 }) => {
   const frame = useCurrentFrame();
   const h = w * 1.41;
+  /* main-column geometry: 10u pad, 7u title with 8u margin, rows 3.4u tall
+     with a 6u gap - row i starts at 25u + i * 9.4u */
+  const glowTop = 25 * u + (glowRow ?? 0) * 9.4 * u;
   return (
     <div
       style={{
@@ -140,11 +144,20 @@ export const MiniPage: React.FC<{ u: number; w: number; swapped?: number[]; from
           <div key={i} style={{ height: 3.4 * u, borderRadius: 2 * u, marginBottom: 6 * u, width: `${58 + ((i * 23) % 30)}%`, background: swapped.includes(100 + i) ? C.gradA : "rgba(232,238,242,0.65)" }} />
         ))}
       </div>
-      <div style={{ flex: 1, padding: `${10 * u}px ${8 * u}px` }}>
+      <div style={{ flex: 1, padding: `${10 * u}px ${8 * u}px`, position: "relative" }}>
         <div style={{ height: 7 * u, width: "52%", background: "#24272b", borderRadius: 3 * u, marginBottom: 8 * u }} />
         {[...Array(9)].map((_, i) => (
           <div key={i} style={{ height: 3.4 * u, borderRadius: 2 * u, marginTop: 6 * u, width: `${60 + ((i * 31) % 36)}%`, background: swapped.includes(i) ? C.gradA : "#c9ced4" }} />
         ))}
+        {glowRow !== undefined && glowPulse > 0 ? (
+          <div
+            style={{
+              position: "absolute", left: 4 * u, right: 6 * u, top: glowTop - 3.2 * u, height: 9.8 * u, borderRadius: 3 * u,
+              background: "rgba(70,200,207,0.30)", boxShadow: `0 0 0 ${1.6 * u}px rgba(70,200,207,0.35)`,
+              opacity: glowPulse,
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

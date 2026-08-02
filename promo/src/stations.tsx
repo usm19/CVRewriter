@@ -114,7 +114,7 @@ export const PhoneJourney: React.FC = () => {
         </MiniCard>
         {frame >= pageAt ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 * u }}>
-            <MiniPage u={u} w={196 * u} from={pageAt} />
+            <MiniPage u={u} w={220 * u} from={pageAt} />
             <div style={{ opacity: io(frame, pageAt + 14, 12) }}>
               <GBtn u={u} pressAt={approveAt}>Looks right, use it</GBtn>
             </div>
@@ -139,30 +139,29 @@ export const PhoneJourney: React.FC = () => {
         <Tap at={tailorPress} x={300 * u} y={192 * u} u={u} />
       </Phase>
 
-      {/* phase C: the result - stays up through editor and honesty */}
+      {/* phase C: the result - stays up through editor and honesty. The
+          header steps aside while the camera is inside the page. */}
       <Phase from={resultAt} to={B.private.start - 8}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 * u, marginBottom: 9 * u, opacity: io(frame, resultAt + 2, 12) }}>
-          <div style={{ width: 20 * u, height: 20 * u, borderRadius: 7 * u, background: grad, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <TickMark size={11 * u} color={C.ink} show />
-          </div>
-          <div style={{ fontSize: 14 * u, fontWeight: 700, color: C.text }}>Team Leader, Fenwick</div>
-        </div>
-        <div style={{ display: "flex", gap: 6 * u, marginBottom: 11 * u }}>
-          {[["12", "asks covered"], ["7", "reworded"], ["2", "to weigh up"]].map(([n, l], i) => (
-            <div key={l} style={{ background: C.surface, borderRadius: 999, padding: `${5 * u}px ${10 * u}px`, fontSize: 10.5 * u, color: C.text2, scale: String(io(frame, statAt + i * 8, 12)), opacity: io(frame, statAt + i * 8, 10) }}>
-              <b style={{ color: i === 2 ? C.danger : C.accent, marginRight: 4 * u, fontSize: 12 * u }}>{n}</b>{l}
+        <div style={{ opacity: Math.max(0, Math.min(1, 1 - io(frame, B.editor.start + 4, 14) + io(frame, B.honesty.start + 8, 16))) }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 * u, marginBottom: 9 * u, opacity: io(frame, resultAt + 2, 12) }}>
+            <div style={{ width: 20 * u, height: 20 * u, borderRadius: 7 * u, background: grad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <TickMark size={11 * u} color={C.ink} show />
             </div>
-          ))}
+            <div style={{ fontSize: 14 * u, fontWeight: 700, color: C.text }}>Team Leader, Fenwick</div>
+          </div>
+          <div style={{ display: "flex", gap: 6 * u, marginBottom: 11 * u }}>
+            {[["12", "asks covered"], ["7", "reworded"], ["2", "to weigh up"]].map(([n, l], i) => (
+              <div key={l} style={{ background: C.surface, borderRadius: 999, padding: `${5 * u}px ${10 * u}px`, fontSize: 10.5 * u, color: C.text2, scale: String(io(frame, statAt + i * 8, 12)), opacity: io(frame, statAt + i * 8, 10) }}>
+                <b style={{ color: i === 2 ? C.danger : C.accent, marginRight: 4 * u, fontSize: 12 * u }}>{n}</b>{l}
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", position: "relative" }}>
-          <MiniPage u={u} w={228 * u} swapped={hlOn} from={resultAt + 10} />
-          {/* the sentence the editor will open, glowing on the page */}
-          <div
-            style={{
-              position: "absolute", left: "50%", top: 96 * u, translate: "-50% 0", width: 128 * u, height: 9 * u, borderRadius: 3 * u,
-              background: "rgba(70,200,207,0.30)", boxShadow: `0 0 0 ${2 * u}px rgba(70,200,207,0.28)`,
-              opacity: frame >= hlFrom ? 0.5 + 0.5 * Math.sin(frame / 7) * (frame < sheetAt ? 1 : 0) : 0,
-            }}
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <MiniPage
+            u={u} w={256 * u} swapped={hlOn} from={resultAt + 10}
+            glowRow={5}
+            glowPulse={frame >= hlFrom + 18 ? 0.75 + 0.25 * Math.sin(frame / 6) : 0}
           />
         </div>
         <Tap at={tapRow} x={195 * u} y={240 * u} u={u} />
@@ -237,18 +236,25 @@ export const LensHud: React.FC<{ portrait: boolean }> = ({ portrait }) => {
       }}
     >
       <div style={{ fontSize: portrait ? 17 : 16, fontWeight: 700, letterSpacing: "0.08em", color: C.accent, marginBottom: 14 }}>WHAT CHANGED, AND WHY</div>
-      <div style={{ fontSize: fs, lineHeight: 1.5, color: C.text2 }}>
-        Handle{" "}
-        <span style={{ position: "relative", whiteSpace: "nowrap" }}>
-          customer care
-          <span style={{ position: "absolute", left: 0, top: "54%", height: 3.5, borderRadius: 2, background: C.danger, width: `${strike}%` }} />
-        </span>{" "}
-        <span style={{ position: "relative", display: "inline-block", color: C.accent, fontWeight: 750 }}>
-          <span style={{ opacity: showAlt ? 0 : 1 }}>customer service</span>
-          <span style={{ position: "absolute", left: 0, top: 0, opacity: showAlt ? io(frame, regenAt + 8, 10) : 0, whiteSpace: "nowrap" }}>customer experience</span>
-        </span>{" "}
-        questions face to face.
-      </div>
+      {(() => {
+        const p2 = showAlt ? io(frame, regenAt + 8, 10) : 0;
+        const sentence = (word: string) => (
+          <div style={{ fontSize: fs, lineHeight: 1.5, color: C.text2 }}>
+            Handle{" "}
+            <span style={{ position: "relative", whiteSpace: "nowrap" }}>
+              customer care
+              <span style={{ position: "absolute", left: 0, top: "54%", height: 3.5, borderRadius: 2, background: C.danger, width: `${strike}%` }} />
+            </span>{" "}
+            <span style={{ color: C.accent, fontWeight: 750 }}>{word}</span> questions face to face.
+          </div>
+        );
+        return (
+          <div style={{ position: "relative" }}>
+            <div style={{ opacity: 1 - p2 }}>{sentence("customer service")}</div>
+            <div style={{ position: "absolute", inset: 0, opacity: p2 }}>{sentence("customer experience")}</div>
+          </div>
+        );
+      })()}
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 20, flexWrap: "wrap" }}>
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, border: "1.5px solid rgba(147,162,160,0.4)", borderRadius: 12, padding: "10px 18px", fontSize: portrait ? 24 : 22, color: C.text, fontWeight: 650, scale: String(press) }}>
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth={2.6} strokeLinecap="round" style={{ rotate: `${Math.min(360, Math.max(0, (frame - regenAt) * 24))}deg` }}>
