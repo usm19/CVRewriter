@@ -254,6 +254,40 @@ a:hover { color: var(--accent-bright); }
 .step-body > p:first-child { margin-top: 12px; }
 .step-body > p { color: var(--text-2); font-size: 15px; }
 
+.points {
+  list-style: none;
+  margin: 14px 0 2px;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+.points li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--text-2);
+}
+.points .ic { color: var(--accent); }
+
+.stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 2px;
+}
+.stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 7px 15px;
+}
+.stat b { font-size: 17px; font-weight: 750; letter-spacing: -0.02em; color: var(--accent); }
+.stat span { font-size: 13px; color: var(--text-2); font-weight: 550; }
+.stat.warn b { color: var(--danger); }
+
 .row {
   display: flex;
   gap: 9px;

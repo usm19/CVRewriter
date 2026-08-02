@@ -78,7 +78,7 @@ export const STOPWORDS = new Set(('a an and are as at be been being but by can c
   'role job work working candidate candidates applicant applicants ideal successful strong excellent good great ability able skills skill experience experienced years year knowledge understanding familiarity background required requirement requirements preferred essential desirable must team teams company organisation organization opportunity opportunities benefits salary apply application closing looking join us new day days per week hours hour full part time permanent contract temporary based location including include includes etc plus bonus').split(/\s+/));
 
 /* Generic single tokens that should never be reported as a gap on their own. */
-export const GENERIC_TERMS = new Set(('communication passionate motivated enthusiastic dynamic flexible reliable proactive detail attention environment fast paced fastpaced culture values mission vision growth development progression training support successful busy friendly positive attitude professional professionalism').split(/\s+/));
+export const GENERIC_TERMS = new Set(('software comfortable confident owning communication passionate motivated enthusiastic dynamic flexible reliable proactive detail attention environment fast paced fastpaced culture values mission vision growth development progression training support successful busy friendly positive attitude professional professionalism').split(/\s+/));
 
 /* Same-meaning professional vocabulary. A swap inside one group changes the
  * word, never the claim. First entry is the group's display name. */
@@ -239,6 +239,8 @@ export const TECH = ['JavaScript', 'TypeScript', 'Python', 'Java', 'C++', 'C#', 
   'Power BI', 'Tableau', 'Looker', 'Pandas', 'NumPy', 'Spark', 'Airflow', 'dbt',
   'Salesforce', 'SAP', 'HubSpot', 'Xero', 'QuickBooks', 'Sage', 'Shopify', 'WordPress', 'Figma', 'Photoshop', 'InDesign', 'Illustrator', 'AutoCAD', 'Jira', 'Trello', 'Asana', 'Slack', 'Zendesk'];
 
+/* Alias clusters are also synonym groups, so a CV's "Postgres" satisfies a
+   listing's "PostgreSQL" and can be mirrored to the listing's exact form. */
 export const TECH_ALIASES = {
   k8s: 'Kubernetes', golang: 'Go', postgres: 'PostgreSQL', 'node': 'Node.js', nodejs: 'Node.js',
   vuejs: 'Vue.js', nextjs: 'Next.js', js: 'JavaScript', ts: 'TypeScript', 'power bi': 'Power BI',
@@ -247,6 +249,12 @@ export const TECH_ALIASES = {
 
 /* JD requirement-section headers, adapted from career-ops jd-skill-gap.mjs.
  * Terms under these headers score higher. */
+for (const [alias, canon] of Object.entries(TECH_ALIASES)) {
+  const g = SYNONYMS.find((grp) => grp[0] === canon);
+  if (g) g.push(alias);
+  else SYNONYMS.push([canon, alias]);
+}
+
 export const REQUIREMENT_HEADER_RE = new RegExp(
   '^\\s*(?:' + [
     'required', 'requirements', 'qualifications', 'must[- ]haves?', 'preferred', 'nice[- ]to[- ]have',

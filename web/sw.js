@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'cvrewriter-v4';
+const CACHE = 'cvrewriter-v5';
 const SHELL = ['./', './index.html', './styles.css', './app.js',
   './engine/rules.js', './engine/nlp.js', './engine/tailor.js', './engine/render.js', './engine/pdf-extract.js', './engine/voice.js',
   './vendor/pdf.min.mjs', './vendor/pdf.worker.min.mjs', './fonts/outfit-latin-wght-normal.woff2',

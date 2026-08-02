@@ -146,3 +146,12 @@ test('a job-title word the CV cannot evidence lands in the gaps', () => {
   assert.ok(report.gaps.some((g) => /barista/i.test(g)), `gaps were: ${report.gaps.join(' | ')}`);
   assert.ok(!report.gaps.some((g) => /leader|nero|leeds/i.test(g)), `role or place words leaked: ${report.gaps.join(' | ')}`);
 });
+
+test('a base-form verb stays base even when the listing inflects it', () => {
+  const jd = `Shop Supervisor, Boots York\n\nKey responsibilities\n- Experience leading a small team through busy trade`;
+  const lines = [{ id: 'L1', text: 'Run weekend trade with a team of eight.' }];
+  const { proposals } = buildProposals(lines, jd, '');
+  const p = proposals.find((x) => x.kind === 'mirror' && /Run/.test(x.before));
+  assert.ok(p, 'expected a mirror on "Run"');
+  assert.match(p.after, /^Lead weekend trade/);
+});

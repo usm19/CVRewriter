@@ -279,8 +279,8 @@ $('btn-paste-toggle').onclick = () => show($('paste-wrap'), $('paste-wrap').hidd
 $('btn-tailor').onclick = async () => {
   const jobUrl = $('in-job').value.trim();
   const pasted = $('in-jobtext').value.trim();
-  if (!jobUrl && pasted.length < 200) {
-    fieldError('tailor-error', pasted ? 'That text looks too short to be a full listing.' : 'Paste the listing link, or its text.');
+  if (!jobUrl && pasted.length < 80) {
+    fieldError('tailor-error', pasted ? 'That text looks too short to be a listing.' : 'Paste the listing link, or its text.');
     return;
   }
   fieldError('tailor-error');
@@ -288,7 +288,7 @@ $('btn-tailor').onclick = async () => {
   $('btn-tailor').disabled = true;
   swapIcon($('tailor-ic'), 'loader', { spin: true });
   try {
-    let jd = pasted.length >= 200 ? pasted.slice(0, JD_MAX) : null;
+    let jd = pasted.length >= 80 ? pasted.slice(0, JD_MAX) : null;
     if (!jd) {
       statusShow('tailor-status', 'Fetching the listing...');
       jd = await fetchJobText(jobUrl);
@@ -328,9 +328,20 @@ const KIND_LABEL = { mirror: "Match the listing's wording", uk: 'UK English', pl
 function renderResult() {
   $('result-title').textContent = current.company ? `${current.title}, ${current.company}` : current.title;
   const r = current.report;
-  $('result-coverage').textContent =
-    `Your CV already covers ${r.matched} of this listing's key asks` +
-    (r.mirrored ? `, ${r.mirrored} of them in different words, which the ticked changes below align.` : '.');
+  const stat = (n, label, warn = false) => {
+    const el = document.createElement('span');
+    el.className = warn ? 'stat warn' : 'stat';
+    const b = document.createElement('b'); b.textContent = n;
+    const s = document.createElement('span'); s.textContent = label;
+    el.append(b, s);
+    return el;
+  };
+  $('result-stats').replaceChildren(
+    stat(r.matched, 'asks your CV covers'),
+    stat(r.mirrored, 'said in your words, aligned below'),
+    ...(r.gaps.length ? [stat(r.gaps.length, 'for you to weigh up', true)] : []),
+  );
+  $('result-stats').classList.add('rise');
 
   const list = $('proposals');
   list.replaceChildren();
@@ -389,7 +400,6 @@ function renderResult() {
     list.append(li);
   }
   show($('no-proposals'), current.proposals.length === 0);
-  $('result-coverage').classList.add('rise');
 
   const gaps = $('result-gaps');
   gaps.replaceChildren(...r.gaps.map((g) => { const li = document.createElement('li'); li.textContent = g; return li; }));

@@ -10,7 +10,7 @@ const SLOP_RES = Object.entries(SLOP).map(([k, v]) => [phraseRe(k), v, k]);
 /* Seniority nouns say what the role is called, not what it needs; a craft
    role word (barista, chef, driver) is a real requirement. Only the former
    are noise in a gap report. */
-const SENIORITY_RE = /\b(manager|assistant|supervisor|coordinator|administrator|executive|officer|advisor|adviser|analyst|specialist|consultant|associate|apprentice|leader|lead|director|head|operative|steward|colleague|member)\b/i;
+const SENIORITY_RE = /\b(manager|assistant|supervisor|coordinator|administrator|executive|officer|advisor|adviser|analyst|specialist|consultant|associate|apprentice|leader|lead|director|head|operative|steward|colleague|member|developer|engineer|designer|technician|programmer)\b/i;
 
 /* Give the replacement the capitalisation of what it replaces, including the
    owner's Title Case habit on skill lists. */
@@ -40,6 +40,7 @@ const isTitleLine = (text) => {
  * group, and the other two are dictionary lookups.
  */
 export function buildProposals(lines, jdText, jobUrl) {
+  jdText = String(jdText || '').replace(/\r\n?/g, '\n');
   const cvText = lines.map((l) => l.text).join('\n');
   const jdTerms = extractJdTerms(jdText);
   const { covered, viaSynonym, gaps } = analyseCoverage(jdTerms, cvText);
@@ -76,10 +77,11 @@ export function buildProposals(lines, jdText, jobUrl) {
     mirrored.add(groupKey);
     for (const variant of t.group.variants) {
       if (variant === jdVariant) continue;
+      const jdIsVerb = VERBS.has(jdVariant.split(' ')[0]);
       for (const [surface, info] of inflectionsOf(variant)) {
         let replace;
-        if (info.form === 'base') replace = t.display;
-        else if (VERBS.has(jdVariant.split(' ')[0])) replace = inflectPhrase(jdVariant, info.form);
+        if (jdIsVerb) replace = inflectPhrase(jdVariant, info.form);   /* match the CV's own form */
+        else if (info.form === 'base') replace = t.display;            /* nouns keep the listing's surface */
         else continue;                     /* cannot inflect the listing's term to match */
         if (replace.toLowerCase() === surface.toLowerCase()) continue;
         const re = phraseRe(surface);
@@ -143,7 +145,7 @@ export function buildProposals(lines, jdText, jobUrl) {
   const cleanGaps = dedupeByStems(gaps.filter((t) =>
     !GENERIC_TERMS.has(t.display) &&
     (t.words.length > 1 || !SENIORITY_RE.test(t.display)) &&
-    t.words.every((w) => !STOPWORDS.has(w) && !COMMON.has(w) && !adverbLike(w)) &&
+    t.words.every((w) => !STOPWORDS.has(w) && !COMMON.has(w) && !GENERIC_TERMS.has(w) && !adverbLike(w)) &&
     t.key.split(' ').every((s) => !cvStems.has(s) && !credStems.has(s)) &&
     (t.words.length > 1 ? t.score >= 4.4 : t.score >= 6)));
   const gapList = [...new Set([...creds, ...cleanGaps.slice(0, 5).map((t) => t.display)])].slice(0, 7);

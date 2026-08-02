@@ -54,8 +54,7 @@
 </header>
 
 <main>
-  <p class="strap">Your CV, reworded for the job in front of you. Same layout, same voice, one page.
-    The whole engine runs on this device; your CV is never sent anywhere.</p>
+  <p class="strap">Your CV, reworded for the job in front of you. Same layout, same voice, one page.</p>
 
   <!-- Step 1: CV -->
   <section class="card step" id="step-cv">
@@ -64,9 +63,11 @@
       <span class="step-state" id="cv-state">To do</span>
     </div>
     <div class="drawer"><div class="step-body" id="cv-body">
-      <p>Upload the CV you already use, as a PDF. CVRewriter takes it apart on this device:
-        every line of text with its exact position, your CV's own fonts, colours and background.
-        Tailored versions are rebuilt from those pieces, so the layout cannot drift.</p>
+      <ul class="points">
+        <li><svg class="ic sm"><use href="#i-check"/></svg>Your exact layout, fonts and colours are kept</li>
+        <li><svg class="ic sm"><use href="#i-check"/></svg>Only words change, and only with your say-so</li>
+        <li><svg class="ic sm"><use href="#i-check"/></svg>Nothing ever leaves this device</li>
+      </ul>
       <div class="row">
         <label class="btn secondary file-label"><svg class="ic" id="upload-ic"><use href="#i-upload"/></svg>Choose file<input type="file" id="in-cv" accept="application/pdf" hidden></label>
         <span class="file-chip" id="cv-chip" hidden></span>
@@ -114,7 +115,7 @@
       <h2><span class="step-glyph"><svg class="ic"><use href="#i-check"/></svg></span><span id="result-title"></span></h2>
     </div>
     <div class="drawer"><div class="step-body">
-      <p id="result-coverage"></p>
+      <div class="stats" id="result-stats"></div>
 
       <div id="proposals-wrap">
         <h3>Suggested word changes</h3>
