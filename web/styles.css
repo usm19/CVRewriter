@@ -317,7 +317,7 @@ input:focus-visible, textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-wash);
 }
-button:focus-visible, .linklike:focus-visible, .p-row label:focus-within {
+button:focus-visible, .linklike:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 6px;
@@ -445,59 +445,7 @@ input::placeholder, textarea::placeholder { color: var(--text-2); opacity: 0.7; 
 .preview-frame iframe.ready { opacity: 1; }
 @media (min-width: 720px) { .preview-frame iframe { height: 560px; } }
 
-/* ---------- proposals ---------- */
-.proposals { list-style: none; margin: 10px 0 0; padding: 0; }
-.p-group {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--accent);
-  padding: 16px 0 6px;
-}
-.p-row { border-radius: 10px; transition: background-color 0.2s ease; }
-.p-row:hover { background: var(--accent-wash); }
-.p-row + .p-row { border-top: 1px solid var(--line); }
-.p-row label {
-  display: flex;
-  gap: 11px;
-  padding: 11px 8px;
-  cursor: pointer;
-  align-items: flex-start;
-}
-.p-row input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
-.p-box {
-  position: relative;
-  width: 20px;
-  height: 20px;
-  margin-top: 2px;
-  border-radius: 6px;
-  border: 1.5px solid var(--line-strong);
-  background: var(--surface);
-  flex: none;
-  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s var(--snap);
-}
-.p-row input:checked + .p-box {
-  background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
-  border-color: transparent;
-  transform: scale(1.05);
-}
-.p-box svg {
-  position: absolute;
-  inset: 2px;
-  stroke: var(--accent-ink);
-  stroke-width: 3;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 20;
-  stroke-dashoffset: 20;
-  transition: stroke-dashoffset 0.25s var(--ease) 0.05s;
-}
-.p-row input:checked + .p-box svg { stroke-dashoffset: 0; }
-.p-body { display: block; min-width: 0; }
+/* ---------- word-change rows (sentence editor) ---------- */
 .p-change { font-size: 15.5px; }
 .p-change del {
   text-decoration: line-through;
@@ -517,15 +465,6 @@ input::placeholder, textarea::placeholder { color: var(--text-2); opacity: 0.7; 
   border-radius: 999px;
   padding: 2px 10px;
   vertical-align: 1.5px;
-}
-.p-ctx {
-  display: block;
-  font-size: 13px;
-  color: var(--text-2);
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* the authored moment: results arriving */
@@ -605,6 +544,51 @@ dialog {
 dialog::backdrop { background: rgb(8 14 11 / 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 dialog[open] { animation: rise-in 0.4s var(--ease); }
 dialog h2 { margin-bottom: 8px; }
+
+/* ---------- sentence editor ---------- */
+.edit-cue { display: flex; align-items: flex-start; gap: 8px; }
+.edit-cue .ic { color: var(--accent); flex: none; margin-top: 2px; }
+
+.edit-dlg { width: min(540px, calc(100vw - 32px)); }
+.edit-lbl {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 3px;
+}
+.edit-orig {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-2);
+  margin-top: 12px;
+}
+.edit-changes { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 12px; }
+.edit-changes:empty { display: none; }
+.edit-dlg textarea { margin-top: 12px; line-height: 1.45; }
+.edit-acts { margin-top: 16px; }
+.edit-acts .primary { margin-left: auto; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn:disabled:active { transform: none; }
+
+@media (max-width: 560px) {
+  /* on a phone the editor is a bottom sheet under the thumb */
+  .edit-dlg {
+    margin: auto 0 0;
+    width: 100vw;
+    max-width: 100vw;
+    border-radius: 20px 20px 0 0;
+    border-bottom: 0;
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+  }
+  @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .edit-dlg[open] { animation: sheet-up 0.35s var(--ease); }
+}
 
 /* ---------- toast ---------- */
 .toast {

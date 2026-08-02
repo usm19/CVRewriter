@@ -1,7 +1,7 @@
 'use strict';
 import { decomposePdf, registerFonts } from './engine/pdf-extract.js';
 import { buildTemplateHtml, lineFits, guessOwnerName } from './engine/render.js';
-import { buildProposals, applyProposals } from './engine/tailor.js';
+import { tailorSentences, sentenceTexts, applyProposals } from './engine/tailor.js';
 import { createProfileKeys, unlockDek, encryptJson, decryptJson, sessionValid, SESSION_DAYS } from './crypto.js';
 
 const JD_MAX = 28000;
@@ -313,12 +313,8 @@ $('btn-tailor').onclick = async () => {
     }
     statusShow('tailor-status', 'Matching the listing against your CV...');
     await new Promise((r) => setTimeout(r, 30));
-    const { proposals, report, title, company } = buildProposals(S.template.lines, jd, jobUrl);
-    current = {
-      id: `${Date.now()}`, ts: Date.now(),
-      title, company, proposals, report,
-      ticked: new Set(proposals.filter((p) => !p.defaultOff).map((p) => p.id)),
-    };
+    const { edits, report, title, company } = tailorSentences(S.template.lines, jd, jobUrl);
+    current = { id: `${Date.now()}`, ts: Date.now(), title, company, edits, report, state: new Map() };
     renderResult();
     await persistCurrent();
     renderHistory();
@@ -332,12 +328,9 @@ $('btn-tailor').onclick = async () => {
 };
 
 function currentHtml() {
-  const texts = applyProposals(S.template.lines, current.proposals, current.ticked);
-  const changed = new Set(S.template.lines.filter((l) => texts.get(l.id) !== l.text).map((l) => l.id));
+  const { texts, changed } = sentenceTexts(S.template.lines, current.edits, current.state);
   return { html: buildTemplateHtml(S.template, texts, changed), texts, changed };
 }
-
-const KIND_LABEL = { mirror: "Match the listing's wording", uk: 'UK English', plain: 'Plainer wording' };
 
 function renderResult() {
   $('result-title').textContent = current.company ? `${current.title}, ${current.company}` : current.title;
@@ -352,68 +345,10 @@ function renderResult() {
   };
   $('result-stats').replaceChildren(
     stat(r.matched, 'asks your CV covers'),
-    stat(r.mirrored, 'said in your words, aligned below'),
+    stat(current.edits.length, 'sentences reworded for you to check', false),
     ...(r.gaps.length ? [stat(r.gaps.length, 'for you to weigh up', true)] : []),
   );
   $('result-stats').classList.add('rise');
-
-  const list = $('proposals');
-  list.replaceChildren();
-  const GROUP_ICON = { mirror: 'sparkles', uk: 'check', plain: 'file' };
-  let lastKind = null, riseIdx = 0;
-  const rise = (el) => {
-    el.classList.add('rise');
-    el.style.animationDelay = `${Math.min(riseIdx++ * 45, 500)}ms`;
-  };
-  for (const p of current.proposals) {
-    if (p.kind !== lastKind) {
-      const h = document.createElement('li');
-      h.className = 'p-group';
-      h.append(mkIcon(GROUP_ICON[p.kind], 'ic sm'), document.createTextNode(KIND_LABEL[p.kind]));
-      rise(h);
-      list.append(h);
-      lastKind = p.kind;
-    }
-    const li = document.createElement('li');
-    li.className = 'p-row';
-    rise(li);
-    const label = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = current.ticked.has(p.id);
-    cb.onchange = async () => {
-      cb.checked ? current.ticked.add(p.id) : current.ticked.delete(p.id);
-      updatePreview();
-      await persistCurrent();
-    };
-    const box = document.createElement('span');
-    box.className = 'p-box';
-    box.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10.5l4 4 8-8.5"/></svg>';
-    const body = document.createElement('span');
-    body.className = 'p-body';
-    const change = document.createElement('span');
-    change.className = 'p-change';
-    const from = document.createElement('del');
-    const m = new RegExp(p.findSrc, 'i').exec(p.before);
-    from.textContent = m ? m[0] : p.findSrc;
-    const arr = document.createElement('span');
-    arr.className = 'arr';
-    arr.textContent = '→';
-    const to = document.createElement('ins');
-    to.textContent = p.replace;
-    change.append(from, ' ', arr, ' ', to);
-    const why = document.createElement('span');
-    why.className = 'p-why';
-    why.textContent = p.why;
-    const ctx = document.createElement('span');
-    ctx.className = 'p-ctx';
-    ctx.textContent = p.before.length > 90 ? p.before.slice(0, 90) + '…' : p.before;
-    body.append(change, why, ctx);
-    label.append(cb, box, body);
-    li.append(label);
-    list.append(li);
-  }
-  show($('no-proposals'), current.proposals.length === 0);
 
   const gaps = $('result-gaps');
   gaps.replaceChildren(...r.gaps.map((g) => { const li = document.createElement('li'); li.textContent = g; return li; }));
@@ -426,22 +361,157 @@ function renderResult() {
 
 function updatePreview() {
   const { html, texts, changed } = currentHtml();
-  renderPreview($('frame-result'), html);
+  const n = changed.size;
+  $('rewrite-hint').querySelector('span').textContent = n
+    ? `${n === 1 ? 'One sentence was' : `${n} sentences were`} reworded to meet the listing. Tap a highlighted sentence to edit it, try another wording, or put it back.`
+    : 'Every rewording has been put back; this is your original CV.';
+  show($('rewrite-hint'), current.edits.length > 0);
+  show($('no-proposals'), current.edits.length === 0);
+  const frame = $('frame-result');
+  renderPreview(frame, html);
+  const inner = frame.onload;
+  frame.onload = () => { inner(); decoratePreview(frame, texts, changed); };
   const tight = [...changed].map((id) => {
     const line = S.template.lines.find((l) => l.id === id);
     return { line, check: lineFits(S.template, line, texts.get(id)) };
   }).filter((x) => !x.check.fits);
   fieldError('tailor-error', tight.length
-    ? `One change makes a line wider than the space it has ("${tight[0].line.text.slice(0, 40)}…"). Check the preview, or untick it.`
+    ? `One change makes a line wider than the space it has ("${tight[0].line.text.slice(0, 40)}…"). Tap it in the preview to shorten it or put it back.`
     : '');
 }
+
+/* Highlight the reworded sentences inside the preview and make each one a
+   button that opens the sentence editor. */
+const HL_CSS = `
+[data-f].hl{cursor:pointer;border-radius:3px;background:rgba(70,200,207,.16);
+  box-shadow:0 0 0 3.5px rgba(70,200,207,.16),inset 0 -1.5px 0 0 #22a7ae;
+  transition:background-color .2s ease,box-shadow .2s ease}
+[data-f].hl:hover{background:rgba(70,200,207,.32);box-shadow:0 0 0 3.5px rgba(70,200,207,.32),inset 0 -1.5px 0 0 #0d7e86}
+[data-f].hl:focus-visible{outline:2px solid #0d7e86;outline-offset:3px}`;
+
+function decoratePreview(frame, texts, changed) {
+  const doc = frame.contentDocument;
+  if (!doc || !doc.getElementById) return;
+  if (!doc.getElementById('hl-css')) {
+    const st = doc.createElement('style');
+    st.id = 'hl-css';
+    st.textContent = HL_CSS;
+    doc.head.append(st);
+  }
+  for (const e of current.edits) {
+    const el = doc.querySelector(`[data-f="${e.lineId}"]`);
+    if (!el) continue;
+    const on = changed.has(e.lineId);
+    el.classList.toggle('hl', on);
+    if (on) {
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', `Edit reworded sentence: ${texts.get(e.lineId)}`);
+      el.onclick = () => openEditor(e.lineId);
+      el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openEditor(e.lineId); } };
+    } else {
+      el.removeAttribute('tabindex');
+      el.removeAttribute('role');
+      el.onclick = el.onkeydown = null;
+    }
+  }
+}
+
+/* ---------- the sentence editor ---------- */
+let editing = null;   /* lineId open in the editor */
+const editFor = (id) => current.edits.find((e) => e.lineId === id);
+const stateFor = (id) => current.state.get(id) || { mode: 'variant', v: 0 };
+
+function openEditor(lineId) {
+  editing = lineId;
+  syncEditor();
+  $('dlg-edit').showModal();
+}
+
+function syncEditor() {
+  const e = editFor(editing);
+  const st = stateFor(editing);
+  const v = (st.v || 0) % e.variants.length;
+  const text = st.mode === 'custom' ? st.text : st.mode === 'original' ? e.original : e.variants[v].text;
+  $('edit-orig').textContent = e.original;
+  $('edit-text').value = text;
+
+  const box = $('edit-changes');
+  box.replaceChildren();
+  if (st.mode === 'variant') {
+    for (const c of e.variants[v].changes) {
+      const row = document.createElement('span');
+      row.className = 'p-change';
+      const from = document.createElement('del'); from.textContent = c.from;
+      const arr = document.createElement('span'); arr.className = 'arr'; arr.textContent = '→';
+      const to = document.createElement('ins'); to.textContent = c.to;
+      const why = document.createElement('span'); why.className = 'p-why'; why.textContent = c.why;
+      row.append(from, ' ', arr, ' ', to, ' ', why);
+      box.append(row);
+    }
+  } else {
+    const note = document.createElement('span');
+    note.className = 'p-why';
+    note.textContent = st.mode === 'custom' ? 'Your own wording' : 'Your original sentence';
+    box.append(note);
+  }
+
+  const many = e.variants.length > 1;
+  $('btn-regen').disabled = !many;
+  $('regen-label').textContent = many
+    ? `Try another wording · ${st.mode === 'variant' ? v + 1 : '–'} of ${e.variants.length}`
+    : 'This is the only honest rewording';
+  editWarn(text);
+}
+
+function editWarn(text) {
+  const line = S.template.lines.find((l) => l.id === editing);
+  fieldError('edit-warn', lineFits(S.template, line, text).fits ? ''
+    : 'This wording is wider than the room the line has, so it will run long on the page.');
+}
+
+$('edit-text').addEventListener('input', () => editWarn($('edit-text').value.trim()));
+
+$('btn-regen').onclick = async () => {
+  const e = editFor(editing);
+  const st = stateFor(editing);
+  const v = st.mode === 'variant' ? ((st.v || 0) + 1) % e.variants.length : 0;
+  current.state.set(editing, { mode: 'variant', v });
+  swapIcon($('regen-ic'), 'refresh');
+  syncEditor();
+  updatePreview();
+  await persistCurrent();
+};
+
+$('btn-revert').onclick = async () => {
+  current.state.set(editing, { mode: 'original', v: stateFor(editing).v || 0 });
+  $('dlg-edit').close();
+  updatePreview();
+  await persistCurrent();
+  toast('Back to your original sentence.');
+};
+
+$('btn-edit-done').onclick = async () => {
+  const e = editFor(editing);
+  const st = stateFor(editing);
+  const text = $('edit-text').value.replace(/\s+/g, ' ').trim();
+  const vi = e.variants.findIndex((x) => x.text === text);
+  if (!text || text === e.original) current.state.set(editing, { mode: 'original', v: st.v || 0 });
+  else if (vi >= 0) current.state.set(editing, { mode: 'variant', v: vi });
+  else current.state.set(editing, { mode: 'custom', text, v: st.v || 0 });
+  $('dlg-edit').close();
+  updatePreview();
+  await persistCurrent();
+};
+
+$('dlg-edit').addEventListener('click', (ev) => { if (ev.target === $('dlg-edit')) $('dlg-edit').close(); });
 
 async function persistCurrent() {
   const { html } = currentHtml();
   const rec = {
     id: current.id, ts: current.ts, title: current.title, company: current.company,
     html, report: current.report,
-    proposals: current.proposals, ticked: [...current.ticked],
+    edits: current.edits, state: [...current.state],
   };
   await db.histPut({ id: pk(rec.id), pid: S.user.id, blob: await encryptJson(S.user.dek, rec) });
   S.history = [rec, ...S.history.filter((h) => h.id !== current.id)];
@@ -477,7 +547,15 @@ function renderHistory() {
     const open = document.createElement('button'); open.className = 'btn secondary small';
     open.append(mkIcon('eye', 'ic sm'), document.createTextNode('Open'));
     open.onclick = () => {
-      current = { id: r.id, ts: r.ts, title: r.title, company: r.company, report: r.report, proposals: r.proposals, ticked: new Set(r.ticked) };
+      const base = { id: r.id, ts: r.ts, title: r.title, company: r.company, report: r.report };
+      if (r.edits) current = { ...base, edits: r.edits, state: new Map(r.state || []) };
+      else {
+        /* record from before sentence editing: reconstruct it as fixed edits */
+        const texts = applyProposals(S.template.lines, r.proposals, new Set(r.ticked));
+        const edits = S.template.lines.filter((l) => texts.get(l.id) !== l.text)
+          .map((l) => ({ lineId: l.id, original: l.text, variants: [{ text: texts.get(l.id), changes: [] }] }));
+        current = { ...base, edits, state: new Map() };
+      }
       renderResult();
     };
     const del = document.createElement('button'); del.className = 'btn ghost small iconbtn';

@@ -7,6 +7,16 @@ import { inflectionsOf, inflectPhrase, VERBS, voiceProfile } from './voice.js';
 const UK_RES = Object.entries(UK_SPELLINGS).map(([k, v]) => [phraseRe(k), v]);
 const SLOP_RES = Object.entries(SLOP).map(([k, v]) => [phraseRe(k), v, k]);
 
+/* Everything the engine writes into a CV is UK English, even when the
+   listing itself spells a term the American way. */
+function ukify(phrase) {
+  for (const [re, uk] of UK_RES) {
+    phrase = phrase.replace(re, uk);
+    re.lastIndex = 0;
+  }
+  return phrase;
+}
+
 /* Seniority nouns say what the role is called, not what it needs; a craft
    role word (barista, chef, driver) is a real requirement. Only the former
    are noise in a gap report. */
@@ -67,7 +77,10 @@ export function buildProposals(lines, jdText, jobUrl) {
   };
 
   /* Mirror the listing's terminology where the CV shows the same thing, in
-     the grammatical form the CV already uses. */
+     the grammatical form the CV already uses. Each swap also carries ranked
+     alternatives from the same group - the owner's own vocabulary first - so
+     a sentence can be regenerated without ever inventing a claim. */
+  const altRank = (a) => profile.phraseCount(a) * 10 + profile.count(a.split(' ')[0]);
   const cvLower = cvText.toLowerCase();
   const mirrored = new Set();
   for (const t of viaSynonym) {
@@ -83,11 +96,18 @@ export function buildProposals(lines, jdText, jobUrl) {
         if (jdIsVerb) replace = inflectPhrase(jdVariant, info.form);   /* match the CV's own form */
         else if (info.form === 'base') replace = t.display;            /* nouns keep the listing's surface */
         else continue;                     /* cannot inflect the listing's term to match */
+        replace = ukify(replace);
         if (replace.toLowerCase() === surface.toLowerCase()) continue;
         const re = phraseRe(surface);
         if (!re.test(cvLower)) { re.lastIndex = 0; continue; }
         re.lastIndex = 0;
-        for (const line of lines) add(line, 'mirror', re, replace, `the listing says "${t.display}"`);
+        const alts = [...new Set(t.group.variants
+          .filter((gv) => gv !== jdVariant && gv !== variant)
+          .map((gv) => ukify(jdIsVerb ? inflectPhrase(gv, info.form) : gv)))]
+          .filter((a) => a.toLowerCase() !== surface.toLowerCase() && a.toLowerCase() !== replace.toLowerCase())
+          .sort((a, b) => altRank(b) - altRank(a))
+          .slice(0, 4);
+        for (const line of lines) add(line, 'mirror', re, replace, `the listing says "${t.display}"`, alts.length ? { alts } : {});
       }
     }
   }
@@ -161,6 +181,72 @@ export function buildProposals(lines, jdText, jobUrl) {
     },
     title, company,
   };
+}
+
+/*
+ * Sentence-level tailoring: apply the engine's own defaults and report the
+ * result per sentence. Each edited sentence carries every honest rendering of
+ * itself - variant 0 is the listing-aligned default, the rest swap in other
+ * members of the same synonym groups, the owner's own vocabulary first - so
+ * the app can offer edit / regenerate / put-it-back on each highlighted line.
+ * Proposals the voice guard turned off are not applied: they are the owner's
+ * voice until the owner says otherwise.
+ */
+export function tailorSentences(lines, jdText, jobUrl) {
+  const { proposals, report, title, company } = buildProposals(lines, jdText, jobUrl);
+  const order = { mirror: 0, plain: 1, uk: 2 };
+  const auto = proposals.filter((p) => !p.defaultOff).sort((a, b) => order[a.kind] - order[b.kind]);
+  const byLine = new Map();
+  for (const p of auto) {
+    if (!byLine.has(p.lineId)) byLine.set(p.lineId, []);
+    byLine.get(p.lineId).push(p);
+  }
+  const edits = [];
+  for (const line of lines) {
+    const ps = byLine.get(line.id);
+    if (!ps) continue;
+    const options = ps.map((p) => [p.replace, ...(p.alts || [])]);
+    const total = Math.min(options.reduce((n, o) => n * o.length, 1), 24);
+    const variants = [], seen = new Set([line.text]);
+    for (let k = 0; k < total && variants.length < 6; k++) {
+      /* mixed-radix combo: the first change cycles fastest, so regenerate
+         visibly reworks the sentence on every press */
+      let idx = k, text = line.text;
+      const changes = [];
+      ps.forEach((p, i) => {
+        const choice = options[i][idx % options[i].length];
+        idx = Math.floor(idx / options[i].length);
+        const re = new RegExp(p.findSrc, 'gi');
+        const m = re.exec(text);
+        if (!m) return;
+        re.lastIndex = 0;
+        changes.push({ from: m[0], to: matchCase(m[0], choice), why: p.why, kind: p.kind });
+        text = text.replace(re, (f) => matchCase(f, choice));
+      });
+      if (seen.has(text)) continue;
+      seen.add(text);
+      variants.push({ text, changes });
+    }
+    if (variants.length) edits.push({ lineId: line.id, original: line.text, variants });
+  }
+  return { edits, report, title, company };
+}
+
+/*
+ * Resolve the texts a set of edits produces under the user's decisions.
+ * state: Map lineId -> {mode:'variant', v} | {mode:'custom', text} | {mode:'original'}.
+ * No entry means the engine's default (variant 0).
+ */
+export function sentenceTexts(lines, edits, state) {
+  const texts = new Map(lines.map((l) => [l.id, l.text]));
+  const changed = new Set();
+  for (const e of edits) {
+    const st = state.get(e.lineId) || { mode: 'variant', v: 0 };
+    if (st.mode === 'original') continue;
+    const text = st.mode === 'custom' ? st.text : e.variants[(st.v || 0) % e.variants.length].text;
+    if (text !== e.original) { texts.set(e.lineId, text); changed.add(e.lineId); }
+  }
+  return { texts, changed };
 }
 
 /* Apply the ticked proposals. Returns Map lineId -> new text. */
