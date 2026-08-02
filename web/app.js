@@ -568,13 +568,8 @@ async function renderAuth() {
 
 async function lock() {
   await db.del('session');
-  S.user = null; S.cv = null; S.template = null; S.history = []; current = null;
-  authSel = null;
-  $('in-pass').value = ''; $('in-name').value = '';
-  show($('template-review'), false);
-  show($('cv-chip'), false);
-  await renderAuth();
-  scrollTo({ top: 0, behavior: 'smooth' });
+  /* a reload tears down every decrypted remnant: DOM, iframes, fonts, heap */
+  location.reload();
 }
 
 async function startSession(prof, dek) {
@@ -582,14 +577,17 @@ async function startSession(prof, dek) {
   S.user = { id: prof.id, name: prof.name, dek };
 }
 
-/* Fold any data saved before spaces existed into the first space created. */
+/* Data saved before spaces existed stays unclaimed until someone says it is
+   theirs; it is never silently absorbed into whichever space came first. */
 async function migrateLegacy() {
   const cv = await db.get('cv'), tpl = await db.get('template');
+  const legacyHist = (await db.histAll()).filter((r) => !r.pid && r.title);
+  if (!(cv && !cv.iv) && !(tpl && !tpl.iv) && !legacyHist.length) return;
+  const label = cv?.name ? `"${cv.name}"` : 'a CV';
+  if (!confirm(`${label} was saved on this device before spaces existed. Is it yours? Cancel leaves it for whoever it belongs to.`)) return;
   if (cv && !cv.iv) { await saveEnc('cv', cv); await db.del('cv'); }
   if (tpl && !tpl.iv) { await saveEnc('template', tpl); await db.del('template'); }
-  for (const r of await db.histAll()) {
-    if (!r.pid && r.title) { await db.histPut({ id: pk(r.id), pid: S.user.id, blob: await encryptJson(S.user.dek, r) }); await db.histDel(r.id); }
-  }
+  for (const r of legacyHist) { await db.histPut({ id: pk(r.id), pid: S.user.id, blob: await encryptJson(S.user.dek, r) }); await db.histDel(r.id); }
 }
 
 async function enterApp() {
@@ -633,7 +631,7 @@ $('btn-auth').onclick = async () => {
       await db.profPut(prof);
       const dek = await unlockDek(pass, prof);
       await startSession(prof, dek);
-      if (profiles.length === 0) await migrateLegacy();
+      await migrateLegacy();
       toast(`Welcome, ${name}. This space is yours.`);
     } else {
       const prof = profiles.find((p) => p.id === authSel);

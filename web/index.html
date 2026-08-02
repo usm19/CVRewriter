@@ -73,11 +73,12 @@
       <div id="auth-form">
         <div class="row" id="name-row"><input type="text" id="in-name" autocomplete="off" maxlength="30" placeholder="Your first name"></div>
         <div class="row">
-          <input type="password" id="in-pass" autocomplete="current-password" placeholder="Passphrase, at least 8 characters">
+          <input type="password" id="in-pass" autocomplete="off" name="space-key" placeholder="Passphrase, at least 8 characters">
           <button class="btn primary" id="btn-auth" type="button"><svg class="ic" id="auth-ic"><use href="#i-lock"/></svg><span id="btn-auth-label">Create my space</span></button>
         </div>
         <p class="hint">Stays unlocked on this device for 90 days, then asks again. If the
-          passphrase is forgotten the space cannot be opened by anyone, including us.</p>
+          passphrase is forgotten the space cannot be opened by anyone, including us. On a
+          shared device, do not let the browser save it.</p>
         <p class="field-error" id="auth-error" hidden></p>
       </div>
       <button class="linklike" id="btn-new-space" type="button" hidden><svg class="ic sm"><use href="#i-user"/></svg>Start a new space instead</button>
