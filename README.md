@@ -1,6 +1,43 @@
 # CVRewriter
 
-Project scaffold with a full agent-skills setup for Claude Code. The skills below load automatically from `.claude/skills/` when you open this repo in Claude Code — no extra install step needed.
+Paste a job listing's link, get your own CV reworded for it. Same layout, same voice, one page, as a downloadable PDF. Free end to end.
+
+The app lives in [`web/`](web/) and deploys to **https://usm19.github.io/CVRewriter/** via GitHub Pages.
+
+## How it works
+
+There is no AI service behind this and nothing to sign up for: the tailoring engine is real code that ships with the page and runs entirely in your browser.
+
+1. **Upload your CV, once.** The engine takes the PDF apart on your device (`web/engine/pdf-extract.js`, built on Mozilla's pdf.js, vendored): every line of text with its exact position and size, the PDF's own embedded fonts re-exported for reuse, each line's ink colour sampled from the rendered page, and a background image of everything that is not text (sidebars, rules, photos), made by painting the text out with its local background colour. Tailored versions are rebuilt from those pieces, so the layout cannot drift. You compare the replica with the original and approve it.
+2. **Paste a job link.** The listing text is fetched (with a paste-the-text fallback for job boards that block robots) and analysed by a deterministic matching engine (`web/engine/nlp.js`): tokeniser, Porter stemmer, weighted term extraction that scores requirement sections higher (section detection adapted from the career-ops skill), and a curated synonym taxonomy of same-meaning professional terms.
+3. **Review the proposed word changes.** Where your CV already says what the listing asks for, in different words, the engine proposes swapping to the listing's own term ("shift planning" to "rotas" when the listing says rotas). Two dictionary passes add UK English corrections and plainer alternatives to known AI-tell words (word lists from the humanizer skill, i.e. Wikipedia's "Signs of AI writing"). Every change is a tickbox showing before and after; nothing is applied without you.
+4. **Save as PDF.** The page is reassembled at the original coordinates in the original fonts and printed by the browser itself, so the result is one A4 page of real, selectable text, which is what recruiters' applicant tracking systems need.
+
+### Why it cannot slop up your CV
+
+- **Truth by construction.** The engine is not generative. A swap can only happen inside one synonym group of same-meaning terms, or via a fixed dictionary entry. It cannot invent an employer, a metric or a skill, because no component of it can produce new sentences.
+- **Your voice survives by default.** Sentences are never restructured; only individual words you approve are exchanged. If your CV uses a word the dictionaries frown on, that is your voice: the suggestion appears and you untick it.
+- **Honest gaps.** Requirements the listing names that your CV does not evidence (certificates, qualifications) are reported to you instead of being written in.
+- **Privacy.** Your CV never leaves the device. The only network use is fetching the listing text from the link you paste.
+
+## Getting it on your iPhone
+
+1. Open https://usm19.github.io/CVRewriter/ in Safari.
+2. Tap Share, then "Add to Home Screen". It installs with its own icon and works like an app.
+3. When you save a PDF, the print sheet opens: choose Save as PDF, or pinch out on the preview and share it to Files.
+
+## One-time setup for the owner
+
+GitHub Pages is free for public repositories, so two switches once:
+
+1. **Make the repo public**: Settings, General, Danger Zone, "Change visibility". Nothing personal lives in this repo; your CV and key stay on your devices.
+2. **Enable Pages via Actions**: the included workflow (`.github/workflows/deploy-pages.yml`) attempts to enable Pages itself on the next push; if the first run complains, set Settings, Pages, Source to "GitHub Actions" and re-run it.
+
+---
+
+# Agent skills setup
+
+This repo also carries a full agent-skills setup for Claude Code (used to build the app above). The skills below load automatically from `.claude/skills/` when you open this repo in Claude Code — no extra install step needed.
 
 ## Installed skills
 

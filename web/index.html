@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CVRewriter</title>
+<meta name="description" content="Paste a job listing, get your own CV reworded for it. Same layout, same voice, one page. Everything runs on your device.">
+<meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121514" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="CVRewriter">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wordmark">CVRewriter</div>
+  <button class="btn ghost small" id="btn-settings" type="button">Settings</button>
+</header>
+
+<main>
+  <p class="strap">Your CV, reworded for the job in front of you. Same layout, same voice, one page.
+    The whole engine runs on this device; your CV is never sent anywhere.</p>
+
+  <!-- Step 1: CV -->
+  <section class="card step" id="step-cv">
+    <div class="step-head">
+      <h2>Your CV, once</h2>
+      <span class="step-state" id="cv-state">To do</span>
+    </div>
+    <div class="step-body" id="cv-body">
+      <p>Upload the CV you already use, as a PDF. CVRewriter takes it apart on this device:
+        every line of text with its exact position, your CV's own fonts, colours and background.
+        Tailored versions are rebuilt from those pieces, so the layout cannot drift.</p>
+      <div class="row">
+        <label class="btn secondary file-label">Choose file<input type="file" id="in-cv" accept="application/pdf" hidden></label>
+        <span class="file-chip" id="cv-chip" hidden></span>
+      </div>
+      <div class="status" id="cv-status" hidden><span class="spin"></span><span class="status-text"></span></div>
+      <p class="field-error" id="cv-error" hidden></p>
+
+      <div id="template-review" hidden>
+        <h3>Check the replica</h3>
+        <p>This working copy was rebuilt from your PDF's own pieces. Compare it with the original;
+          if it reads correctly, approve it.</p>
+        <div class="preview-frame"><iframe id="frame-template" title="Replica of your CV" sandbox="allow-same-origin"></iframe></div>
+        <div class="row">
+          <button class="btn primary" id="btn-approve" type="button">Looks right, use it</button>
+          <button class="btn ghost" id="btn-view-original" type="button">View original</button>
+          <button class="btn ghost" id="btn-recv" type="button">Different file</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 2: tailor -->
+  <section class="card step" id="step-tailor">
+    <div class="step-head">
+      <h2>Tailor to a job</h2>
+      <span class="step-state" id="tailor-state">Waiting</span>
+    </div>
+    <div class="step-body" id="tailor-body">
+      <div class="row">
+        <input type="url" id="in-job" inputmode="url" placeholder="Paste the job listing's link" spellcheck="false">
+        <button class="btn primary" id="btn-tailor" type="button">Tailor my CV</button>
+      </div>
+      <button class="linklike" id="btn-paste-toggle" type="button">Link not loading? Paste the listing text instead</button>
+      <div id="paste-wrap" hidden>
+        <textarea id="in-jobtext" rows="8" placeholder="Paste the full job listing here"></textarea>
+      </div>
+      <div class="status" id="tailor-status" hidden><span class="spin"></span><span class="status-text"></span></div>
+      <p class="field-error" id="tailor-error" hidden></p>
+    </div>
+  </section>
+
+  <!-- Result -->
+  <section class="card step" id="result" hidden>
+    <div class="step-head"><h2 id="result-title"></h2></div>
+    <div class="step-body">
+      <p id="result-coverage"></p>
+
+      <div id="proposals-wrap">
+        <h3>Suggested word changes</h3>
+        <p>Tick what you want. Nothing is changed without you; every change is words only.</p>
+        <ul class="proposals" id="proposals"></ul>
+        <p class="hint" id="no-proposals" hidden>Your wording already matches this listing; there is nothing worth changing.</p>
+      </div>
+
+      <h3>Preview</h3>
+      <div class="preview-frame"><iframe id="frame-result" title="Your tailored CV" sandbox="allow-same-origin"></iframe></div>
+      <div class="row">
+        <button class="btn primary" id="btn-pdf" type="button">Save as PDF</button>
+        <button class="btn ghost" id="btn-discard" type="button">Discard</button>
+      </div>
+      <p class="hint" id="ios-hint" hidden>On iPhone: the print sheet opens. Choose Save as PDF,
+        or pinch out on the preview and share it to Files.</p>
+
+      <div class="result-notes">
+        <div id="gaps-wrap" hidden>
+          <h4>Worth knowing before you apply</h4>
+          <p class="hint">The listing asks for these and your CV does not mention them. CVRewriter
+            never invents, so add them yourself only if they are true.</p>
+          <ul id="result-gaps"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- History -->
+  <section class="card step" id="step-history" hidden>
+    <div class="step-head"><h2>Past versions</h2></div>
+    <div class="step-body"><ul class="history" id="history-list"></ul></div>
+  </section>
+</main>
+
+<footer>
+  <p>No accounts, no servers, no AI service: the engine is in the page and everything stays on
+    this device. The only network use is fetching the listing text from the link you paste.</p>
+</footer>
+
+<dialog id="dlg-settings">
+  <h2>Settings</h2>
+  <p class="hint">CVRewriter stores your CV, its working copy and your tailored versions in this
+    browser only.</p>
+  <div class="row">
+    <button class="btn danger" id="btn-wipe" type="button">Delete everything stored on this device</button>
+  </div>
+  <div class="row">
+    <button class="btn ghost" id="btn-settings-close" type="button">Close</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
