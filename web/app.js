@@ -45,24 +45,79 @@ let current = null;   /* the open tailoring session */
 const $ = (id) => document.getElementById(id);
 const show = (el, on = true) => { el.hidden = !on; };
 
+/* ---------- icons ---------- */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function mkIcon(name, cls = 'ic') {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', cls);
+  const use = document.createElementNS(SVG_NS, 'use');
+  use.setAttribute('href', `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+function swapIcon(svgEl, name, { spin = false } = {}) {
+  if (!svgEl) return;
+  svgEl.querySelector('use').setAttribute('href', `#i-${name}`);
+  svgEl.classList.toggle('ic-spin', spin);
+  svgEl.classList.remove('ic-swap');
+  void svgEl.getBoundingClientRect();
+  if (!spin) svgEl.classList.add('ic-swap');
+}
+
+/* ---------- theme ---------- */
+const THEMES = ['auto', 'light', 'dark'];
+const THEME_ICON = { auto: 'monitor', light: 'sun', dark: 'moon' };
+const THEME_LABEL = { auto: 'follow device', light: 'light', dark: 'dark' };
+let theme = localStorage.getItem('cvr-theme') || 'auto';
+function applyTheme(animate = false) {
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+  if (animate) swapIcon($('theme-ic'), THEME_ICON[theme]);
+  else $('theme-ic').querySelector('use').setAttribute('href', `#i-${THEME_ICON[theme]}`);
+  $('btn-theme').setAttribute('aria-label', `Theme: ${THEME_LABEL[theme]}`);
+  const dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#0e1512' : '#f4f6f4'));
+}
+$('btn-theme').onclick = () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  localStorage.setItem('cvr-theme', theme);
+  applyTheme(true);
+  toast(`Theme: ${THEME_LABEL[theme]}`);
+};
+
 /* ---------- toasts, status, errors ---------- */
 let toastTimer;
 function toast(msg) {
   const t = $('toast');
-  t.textContent = msg;
+  t.replaceChildren(mkIcon('check', 'ic sm'), document.createTextNode(msg));
+  show(t, false);
+  void t.getBoundingClientRect();
   show(t);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => show(t, false), 3200);
 }
 function statusShow(id, msg) { const box = $(id); box.querySelector('.status-text').textContent = msg; show(box); }
 function statusHide(id) { show($(id), false); }
-function fieldError(id, msg) { const el = $(id); el.textContent = msg || ''; show(el, !!msg); }
+function fieldError(id, msg) {
+  const el = $(id);
+  if (msg) {
+    const span = document.createElement('span');
+    span.textContent = msg;
+    el.replaceChildren(mkIcon('alert', 'ic sm'), span);
+  } else el.replaceChildren();
+  show(el, !!msg);
+}
 
 /* ---------- previews ---------- */
 const docFor = (html) => `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}*,*::before,*::after{box-sizing:border-box}</style></head><body>${html}</body></html>`;
 
 function renderPreview(iframe, html) {
-  iframe.onload = () => { fitIframe(iframe); setTimeout(() => fitIframe(iframe), 250); };
+  iframe.classList.remove('ready');
+  iframe.onload = () => {
+    fitIframe(iframe);
+    iframe.classList.add('ready');
+    setTimeout(() => fitIframe(iframe), 250);
+  };
   iframe.srcdoc = docFor(html);
 }
 function fitIframe(iframe) {
@@ -122,15 +177,40 @@ async function fetchJobText(jobUrl) {
 }
 
 /* ---------- step gating ---------- */
+function setState(id, text, { done = false, chevron = false, collapsed = false } = {}) {
+  const el = $(id);
+  el.replaceChildren();
+  if (done) el.append(mkIcon('check', 'ic sm'));
+  if (text) el.append(document.createTextNode(text));
+  if (chevron) {
+    const c = mkIcon('chev', 'ic sm chev');
+    c.style.cssText = `transition:transform .4s cubic-bezier(.16,1,.3,1);transform:rotate(${collapsed ? 0 : 180}deg)`;
+    el.append(c);
+  }
+  el.classList.toggle('done', done);
+}
 function renderGates() {
   const tplDone = !!S.template?.approved;
-  $('cv-state').textContent = tplDone ? 'Ready' : S.cv ? 'In progress' : 'To do';
-  $('cv-state').classList.toggle('done', tplDone);
-  $('step-cv').classList.toggle('collapsed', tplDone);
-  $('step-cv').querySelector('.step-head').onclick = () => { if (S.template?.approved) $('step-cv').classList.toggle('collapsed'); };
+  const glyph = $('cv-glyph');
+  const want = tplDone ? 'check' : 'file';
+  if (!glyph.querySelector('use').getAttribute('href').endsWith(want)) swapIcon(glyph, want);
+  const cvCollapsed = tplDone && !$('step-cv').classList.contains('open');
+  $('step-cv').classList.toggle('collapsed', cvCollapsed);
+  $('step-cv').classList.toggle('done', tplDone);
+  $('step-cv').classList.toggle('clickable-head', tplDone);
+  setState('cv-state', tplDone ? 'Ready' : S.cv ? 'In progress' : 'To do',
+    { done: tplDone, chevron: tplDone, collapsed: cvCollapsed });
+  $('step-cv').querySelector('.step-head').onclick = () => {
+    if (!S.template?.approved) return;
+    $('step-cv').classList.toggle('open');
+    renderGates();
+  };
   $('step-tailor').classList.toggle('locked', !tplDone);
-  $('tailor-state').textContent = tplDone ? '' : 'Waiting';
-  if (S.cv) { $('cv-chip').textContent = S.cv.name; show($('cv-chip')); }
+  setState('tailor-state', tplDone ? '' : 'Waiting');
+  if (S.cv) {
+    $('cv-chip').replaceChildren(mkIcon('file', 'ic sm'), document.createTextNode(S.cv.name));
+    show($('cv-chip'));
+  }
 }
 
 /* ---------- step 1: CV ---------- */
@@ -142,6 +222,7 @@ $('in-cv').addEventListener('change', async (e) => {
   fieldError('cv-error');
   show($('template-review'), false);
   statusShow('cv-status', 'Taking your CV apart: text, fonts, colours, background...');
+  swapIcon($('upload-ic'), 'loader', { spin: true });
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const b64 = bufToB64(bytes);       /* before decompose: pdf.js takes the buffer */
@@ -154,9 +235,12 @@ $('in-cv').addEventListener('change', async (e) => {
     await db.set('template', model);
     show($('template-review'));
     renderPreview($('frame-template'), buildTemplateHtml(model));
+    swapIcon($('upload-ic'), 'check');
+    setTimeout(() => swapIcon($('upload-ic'), 'upload'), 1600);
     if (model.meta.pages > 1) toast('Only page one is used; CVRewriter makes one-page CVs.');
     $('template-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
+    swapIcon($('upload-ic'), 'upload');
     fieldError('cv-error', err.message === 'no-text'
       ? 'No selectable text was found in that PDF, so it is probably a scan or photo. Export the CV as a PDF from the program it was written in and try again.'
       : 'That PDF could not be read. Try re-exporting it and uploading again.');
@@ -202,6 +286,7 @@ $('btn-tailor').onclick = async () => {
   fieldError('tailor-error');
   show($('result'), false);
   $('btn-tailor').disabled = true;
+  swapIcon($('tailor-ic'), 'loader', { spin: true });
   try {
     let jd = pasted.length >= 200 ? pasted.slice(0, JD_MAX) : null;
     if (!jd) {
@@ -227,6 +312,7 @@ $('btn-tailor').onclick = async () => {
     fieldError('tailor-error', err.message);
   } finally {
     statusHide('tailor-status');
+    swapIcon($('tailor-ic'), 'sparkles');
     $('btn-tailor').disabled = false;
   }
 };
@@ -248,17 +334,24 @@ function renderResult() {
 
   const list = $('proposals');
   list.replaceChildren();
-  let lastKind = null;
+  const GROUP_ICON = { mirror: 'sparkles', uk: 'check', plain: 'file' };
+  let lastKind = null, riseIdx = 0;
+  const rise = (el) => {
+    el.classList.add('rise');
+    el.style.animationDelay = `${Math.min(riseIdx++ * 45, 500)}ms`;
+  };
   for (const p of current.proposals) {
     if (p.kind !== lastKind) {
       const h = document.createElement('li');
       h.className = 'p-group';
-      h.textContent = KIND_LABEL[p.kind];
+      h.append(mkIcon(GROUP_ICON[p.kind], 'ic sm'), document.createTextNode(KIND_LABEL[p.kind]));
+      rise(h);
       list.append(h);
       lastKind = p.kind;
     }
     const li = document.createElement('li');
     li.className = 'p-row';
+    rise(li);
     const label = document.createElement('label');
     const cb = document.createElement('input');
     cb.type = 'checkbox';
@@ -268,6 +361,9 @@ function renderResult() {
       updatePreview();
       await persistCurrent();
     };
+    const box = document.createElement('span');
+    box.className = 'p-box';
+    box.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10.5l4 4 8-8.5"/></svg>';
     const body = document.createElement('span');
     body.className = 'p-body';
     const change = document.createElement('span');
@@ -275,9 +371,12 @@ function renderResult() {
     const from = document.createElement('del');
     const m = new RegExp(p.findSrc, 'i').exec(p.before);
     from.textContent = m ? m[0] : p.findSrc;
+    const arr = document.createElement('span');
+    arr.className = 'arr';
+    arr.textContent = '→';
     const to = document.createElement('ins');
     to.textContent = p.replace;
-    change.append(from, ' → ', to);
+    change.append(from, ' ', arr, ' ', to);
     const why = document.createElement('span');
     why.className = 'p-why';
     why.textContent = p.why;
@@ -285,11 +384,12 @@ function renderResult() {
     ctx.className = 'p-ctx';
     ctx.textContent = p.before.length > 90 ? p.before.slice(0, 90) + '…' : p.before;
     body.append(change, why, ctx);
-    label.append(cb, body);
+    label.append(cb, box, body);
     li.append(label);
     list.append(li);
   }
   show($('no-proposals'), current.proposals.length === 0);
+  $('result-coverage').classList.add('rise');
 
   const gaps = $('result-gaps');
   gaps.replaceChildren(...r.gaps.map((g) => { const li = document.createElement('li'); li.textContent = g; return li; }));
@@ -343,17 +443,22 @@ function renderHistory() {
   list.replaceChildren(...S.history.map((r) => {
     const li = document.createElement('li');
     const job = document.createElement('div'); job.className = 'job';
+    const meta = document.createElement('div');
     const b = document.createElement('b'); b.textContent = r.company ? `${r.title}, ${r.company}` : r.title;
     const s = document.createElement('span');
     s.textContent = new Date(r.ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    job.append(b, s);
+    meta.append(b, s);
+    job.append(mkIcon('file'), meta);
     const acts = document.createElement('div'); acts.className = 'acts';
-    const open = document.createElement('button'); open.className = 'btn secondary small'; open.textContent = 'Open';
+    const open = document.createElement('button'); open.className = 'btn secondary small';
+    open.append(mkIcon('eye', 'ic sm'), document.createTextNode('Open'));
     open.onclick = () => {
       current = { id: r.id, ts: r.ts, title: r.title, company: r.company, report: r.report, proposals: r.proposals, ticked: new Set(r.ticked) };
       renderResult();
     };
-    const del = document.createElement('button'); del.className = 'btn ghost small'; del.textContent = 'Delete';
+    const del = document.createElement('button'); del.className = 'btn ghost small iconbtn';
+    del.setAttribute('aria-label', 'Delete this version');
+    del.append(mkIcon('trash', 'ic sm'));
     del.onclick = async () => {
       await db.histDel(r.id);
       S.history = S.history.filter((h) => h.id !== r.id);
@@ -376,6 +481,11 @@ $('btn-wipe').onclick = async () => {
 };
 
 /* ---------- boot ---------- */
+applyTheme();
+new IntersectionObserver(([e]) => {
+  $('masthead').classList.toggle('scrolled', !e.isIntersecting);
+}).observe($('top-sentinel'));
+
 (async function init() {
   S.cv = (await db.get('cv')) || null;
   S.template = (await db.get('template')) || null;

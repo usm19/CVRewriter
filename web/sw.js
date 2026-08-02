@@ -1,8 +1,8 @@
 'use strict';
-const CACHE = 'cvrewriter-v2';
+const CACHE = 'cvrewriter-v3';
 const SHELL = ['./', './index.html', './styles.css', './app.js',
   './engine/rules.js', './engine/nlp.js', './engine/tailor.js', './engine/render.js', './engine/pdf-extract.js',
-  './vendor/pdf.min.mjs', './vendor/pdf.worker.min.mjs',
+  './vendor/pdf.min.mjs', './vendor/pdf.worker.min.mjs', './fonts/outfit-latin-wght-normal.woff2',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-512-maskable.png', './icons/icon-180.png', './icons/favicon.svg'];
 
 self.addEventListener('install', (e) => {
