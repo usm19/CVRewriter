@@ -76,7 +76,7 @@ function applyTheme(animate = false) {
   else $('theme-ic').querySelector('use').setAttribute('href', `#i-${THEME_ICON[theme]}`);
   $('btn-theme').setAttribute('aria-label', `Theme: ${THEME_LABEL[theme]}`);
   const dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#0e1512' : '#f4f6f4'));
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#0d1414' : '#f4f6f6'));
 }
 $('btn-theme').onclick = () => {
   theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];

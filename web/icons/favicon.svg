@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#15654d"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e9469"/>
+      <stop offset="1" stop-color="#1470b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
   <text x="256" y="308" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="200" font-weight="700" letter-spacing="-8" fill="#ffffff">CV</text>
-  <rect x="150" y="360" width="212" height="18" rx="9" fill="#7fc6ac"/>
+  <rect x="150" y="360" width="212" height="18" rx="9" fill="#ffffff" fill-opacity="0.55"/>
 </svg>
