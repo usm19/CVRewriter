@@ -10,13 +10,14 @@ export function tokenize(text) {
 }
 
 /* Porter stemmer, standard implementation, enough for matching. */
+const V = '[aeiouy]', C = '[^aeiouy]';
+const mgr0 = new RegExp(`^(${C}+)?${V}[a-z]*${C}`);
+const meq1 = new RegExp(`^(${C}+)?${V}[a-z]*${C}(${V}[a-z]*)?$`);
+const mgr1 = new RegExp(`^(${C}+)?(${V}[a-z]*${C}){2}`);
+const hasV = new RegExp(`^(${C}+)?${V}`);
 export function stem(w) {
   if (w.length < 3) return w;
-  const v = '[aeiouy]', c = '[^aeiouy]';
-  const mgr0 = new RegExp(`^(${c}+)?${v}[a-z]*${c}`);
-  const meq1 = new RegExp(`^(${c}+)?${v}[a-z]*${c}(${v}[a-z]*)?$`);
-  const mgr1 = new RegExp(`^(${c}+)?(${v}[a-z]*${c}){2}`);
-  const hasV = new RegExp(`^(${c}+)?${v}`);
+  const c = C, v = V;
   let w2 = w.replace(/^y/, 'Y');
   /* step 1a */
   if (/sses$/.test(w2)) w2 = w2.replace(/sses$/, 'ss');
@@ -49,7 +50,7 @@ export function stem(w) {
   return w2.replace(/^Y/, 'y');
 }
 
-const stemKey = (phrase) => tokenize(phrase).map(stem).join(' ');
+export const stemKey = (phrase) => tokenize(phrase).map(stem).join(' ');
 
 /* ---------- synonym lattice ---------- */
 /* Indexed over every generated inflection surface, so an irregular form in
@@ -59,14 +60,17 @@ SYNONYMS.forEach((group, gi) => group.forEach((v) => {
   for (const surface of inflectionsOf(v).keys()) GROUP_OF.set(stemKey(surface), gi);
 }));
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const surfaceRe = (s) => new RegExp(`(?<![a-z0-9])${escapeRe(s).replace(/\\?\s+/g, '[\\s-]+')}(?![a-z0-9])`);
+export const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export const phraseRe = (phrase, flags = 'gi') =>
+  new RegExp(`(?<![A-Za-z0-9])${escapeRe(phrase).replace(/\\?\s+/g, '[\\s-]+')}(?![A-Za-z0-9])`, flags);
 
-/* Does the CV show this group in any of its variants' inflections? */
-export function groupInText(group, textLower) {
-  return group.variants.some((v) =>
-    [...inflectionsOf(v).keys()].some((s) => surfaceRe(s).test(textLower)));
-}
+/* One alternation regex per group over every variant inflection, built once:
+   groupInText is then a single cached test. */
+const GROUP_RE = SYNONYMS.map((group) => new RegExp(
+  `(?<![a-z0-9])(?:${group.flatMap((v) => [...inflectionsOf(v).keys()])
+    .map((s) => escapeRe(s).replace(/\\?\s+/g, '[\\s-]+')).join('|')})(?![a-z0-9])`, 'i'));
+
+export const groupInText = (group, textLower) => GROUP_RE[group.index].test(textLower);
 
 const TECH_CANON = new Map(); /* lowercase -> display */
 TECH.forEach((t) => TECH_CANON.set(t.toLowerCase(), t));
@@ -91,12 +95,13 @@ function sectionWeights(lines) {
   return weights;
 }
 
+export const findTitleLine = (lines) =>
+  lines.find((l) => l.trim() && l.trim().length < 80 && ROLE_WORDS.test(l) && !/apply|salary|posted|ago\b/i.test(l)) || '';
+
 export function guessTitleCompany(jdText, jobUrl) {
   const lines = jdText.split(/\n+/).map((l) => l.trim()).filter(Boolean).slice(0, 25);
-  let title = '', company = '';
-  for (const l of lines) {
-    if (l.length < 80 && ROLE_WORDS.test(l) && !/apply|salary|location|posted|ago\b/i.test(l)) { title = l.replace(/^[#>*\s-]+/, ''); break; }
-  }
+  let company = '';
+  let title = findTitleLine(lines).replace(/^[#>*\s-]+/, '');
   /* "Team Leader, Fenwick" or "Team Leader at Fenwick" or "Team Leader - Fenwick" */
   const split = title.match(/^(.{3,50}?)(?:,| at | @ | \| | [-–] )\s*(.{2,40})$/);
   if (split && ROLE_WORDS.test(split[1])) { title = split[1].trim(); company = split[2].trim(); }
@@ -145,7 +150,7 @@ export function extractJdTerms(jdText) {
   };
 
   /* the job title's own words are what the listing is most about */
-  const titleLine = lines.slice(0, 8).find((l) => l.trim() && l.trim().length < 80 && ROLE_WORDS.test(l));
+  const titleLine = findTitleLine(lines.slice(0, 8));
   if (titleLine) {
     for (const tok of tokenize(titleLine.split(/,| at | \| /)[0])) {
       if (!STOPWORDS.has(tok)) bump(tok, 6);

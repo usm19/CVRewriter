@@ -1,16 +1,16 @@
 'use strict';
 import { UK_SPELLINGS, SLOP, GENERIC_TERMS, STOPWORDS } from './rules.js';
+import { extractJdTerms, analyseCoverage, guessTitleCompany, extractCredentials, tokenize, stem, stemKey, phraseRe } from './nlp.js';
+import { inflectionsOf, inflectPhrase, VERBS, voiceProfile } from './voice.js';
+
+/* Dictionary regexes are static: compile once. */
+const UK_RES = Object.entries(UK_SPELLINGS).map(([k, v]) => [phraseRe(k), v]);
+const SLOP_RES = Object.entries(SLOP).map(([k, v]) => [phraseRe(k), v, k]);
 
 /* Seniority nouns say what the role is called, not what it needs; a craft
    role word (barista, chef, driver) is a real requirement. Only the former
    are noise in a gap report. */
 const SENIORITY_RE = /\b(manager|assistant|supervisor|coordinator|administrator|executive|officer|advisor|adviser|analyst|specialist|consultant|associate|apprentice|leader|lead|director|head|operative|steward|colleague|member)\b/i;
-import { extractJdTerms, analyseCoverage, guessTitleCompany, extractCredentials, tokenize, stem } from './nlp.js';
-import { inflectionsOf, inflectPhrase, VERBS, voiceProfile } from './voice.js';
-
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const phraseRe = (phrase, flags = 'gi') =>
-  new RegExp(`(?<![A-Za-z0-9])${escapeRe(phrase).replace(/\\?\s+/g, '[\\s-]+')}(?![A-Za-z0-9])`, flags);
 
 /* Give the replacement the capitalisation of what it replaces, including the
    owner's Title Case habit on skill lists. */
@@ -53,7 +53,7 @@ export function buildProposals(lines, jdText, jobUrl) {
     if (!m) return;
     /* proper-noun guard: a capitalised match mid-sentence beside another
        capitalised word is a name, not vocabulary */
-    if (kind === 'mirror' && /^[A-Z]/.test(m[0]) && m.index > 0 && !isTitleLine(line.text)) {
+    if (/^[A-Z]/.test(m[0]) && m.index > 0 && !isTitleLine(line.text)) {
       const before = line.text.slice(0, m.index).trimEnd();
       const nextWord = line.text.slice(m.index + m[0].length).trimStart().split(/\s+/)[0] || '';
       const prevWord = before.split(/\s+/).pop() || '';
@@ -67,8 +67,13 @@ export function buildProposals(lines, jdText, jobUrl) {
 
   /* Mirror the listing's terminology where the CV shows the same thing, in
      the grammatical form the CV already uses. */
+  const cvLower = cvText.toLowerCase();
+  const mirrored = new Set();
   for (const t of viaSynonym) {
-    const jdVariant = t.group.variants.find((v) => tokenize(v).map(stem).join(' ') === t.key) || t.display;
+    const jdVariant = t.group.variants.find((v) => stemKey(v) === t.key) || t.display;
+    const groupKey = `${t.group.index}|${jdVariant}`;
+    if (mirrored.has(groupKey)) continue;
+    mirrored.add(groupKey);
     for (const variant of t.group.variants) {
       if (variant === jdVariant) continue;
       for (const [surface, info] of inflectionsOf(variant)) {
@@ -78,10 +83,9 @@ export function buildProposals(lines, jdText, jobUrl) {
         else continue;                     /* cannot inflect the listing's term to match */
         if (replace.toLowerCase() === surface.toLowerCase()) continue;
         const re = phraseRe(surface);
-        for (const line of lines) {
-          if (re.test(line.text)) { re.lastIndex = 0; add(line, 'mirror', re, replace, `the listing says "${t.display}"`); }
-          re.lastIndex = 0;
-        }
+        if (!re.test(cvLower)) { re.lastIndex = 0; continue; }
+        re.lastIndex = 0;
+        for (const line of lines) add(line, 'mirror', re, replace, `the listing says "${t.display}"`);
       }
     }
   }
@@ -89,19 +93,16 @@ export function buildProposals(lines, jdText, jobUrl) {
   /* UK spellings and plain-wording, dictionary passes. A word the owner uses
      repeatedly is their voice (career-ops Voice DNA): still offered, but off
      by default. */
-  const usesOften = (phrase) =>
-    (phrase.includes(' ') ? profile.phraseCount(phrase) : profile.count(phrase)) >= 2;
+  const often = new Map();
+  const usesOften = (phrase) => {
+    if (!often.has(phrase)) often.set(phrase, profile.phraseCount(phrase) >= 2);
+    return often.get(phrase);
+  };
   for (const line of lines) {
-    for (const [us, uk] of Object.entries(UK_SPELLINGS)) {
-      const re = phraseRe(us);
-      if (re.test(line.text)) { re.lastIndex = 0; add(line, 'uk', re, uk, 'UK English'); }
-    }
-    for (const [tell, plain] of Object.entries(SLOP)) {
-      const re = phraseRe(tell);
-      if (!re.test(line.text)) continue;
-      re.lastIndex = 0;
-      if (usesOften(tell)) add(line, 'plain', re, plain, 'appears often in your CV, so it may be your voice', { defaultOff: true });
-      else add(line, 'plain', re, plain, 'plainer wording');
+    for (const [re, uk] of UK_RES) add(line, 'uk', re, uk, 'UK English');
+    for (const [re, plain, tell] of SLOP_RES) {
+      const off = usesOften(tell);
+      add(line, 'plain', re, plain, off ? 'appears often in your CV, so it may be your voice' : 'plainer wording', off ? { defaultOff: true } : {});
     }
   }
 

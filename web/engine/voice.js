@@ -58,12 +58,16 @@ export function inflect(word, form) {
 
 /* surface -> {base, form} for one synonym-group variant. The head word
    inflects; the rest of the phrase travels literally. */
+const INFLECTION_CACHE = new Map();
 export function inflectionsOf(variant) {
+  const hit = INFLECTION_CACHE.get(variant);
+  if (hit) return hit;
   const m = new Map([[variant, { base: variant, form: 'base' }]]);
   const [head, ...rest] = variant.split(' ');
   const tail = rest.length ? ' ' + rest.join(' ') : '';
   const forms = VERBS.has(head) ? ['past', 'ing', 's'] : head.length >= 4 ? ['s'] : [];
   for (const form of forms) m.set(inflect(head, form) + tail, { base: variant, form });
+  INFLECTION_CACHE.set(variant, m);
   return m;
 }
 

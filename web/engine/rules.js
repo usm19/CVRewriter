@@ -39,10 +39,11 @@ export const UK_SPELLINGS = {
   aging: 'ageing', gray: 'grey', jewelry: 'jewellery', checkbook: 'chequebook', checks: 'cheques',
   'driving license': 'driving licence', "driver's license": "driver's licence",
   'best practise': 'best practice', 'best practises': 'best practices',
-  'training program': 'training programme', 'training programs': 'training programmes',
-  'development program': 'development programme', 'graduate program': 'graduate programme',
-  'apprenticeship program': 'apprenticeship programme', 'mentoring program': 'mentoring programme',
 };
+for (const q of ['training', 'development', 'graduate', 'apprenticeship', 'mentoring', 'induction']) {
+  UK_SPELLINGS[`${q} program`] = `${q} programme`;
+  UK_SPELLINGS[`${q} programs`] = `${q} programmes`;
+}
 
 /* AI-tell words with plain replacements. Suggestions only; if the CV's owner
  * genuinely writes this way it is their voice and the user just unticks. */
@@ -219,7 +220,6 @@ export const SYNONYMS = [
   ['month end', 'month-end close', 'monthly close'],
   ['petty cash', 'cash floats'],
   /* hospitality and beauty */
-  ['barista', 'coffee preparation', 'hot drinks'],
   ['covers', 'service covers'],
   ['beauty treatments', 'treatments'],
   /* education and events */
