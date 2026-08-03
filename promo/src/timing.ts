@@ -5,15 +5,15 @@
 export const FPS = 30;
 
 const VO_SECONDS: Record<string, number> = {
-  hook: 4.1,
-  upload: 8.83,
-  link: 3.32,
-  engine: 8.56,
-  editor: 8.77,
-  honesty: 4.11,
-  private: 6.0,
-  finish: 4.79,
-  cta: 8.16,
+  hook: 4.44,
+  upload: 9.17,
+  link: 3.59,
+  engine: 9.91,
+  editor: 9.55,
+  honesty: 4.5,
+  private: 6.54,
+  finish: 5.52,
+  cta: 8.68,
 };
 
 const LEAD = 0.45;
