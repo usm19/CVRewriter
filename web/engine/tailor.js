@@ -34,6 +34,23 @@ function matchCase(found, replacement) {
   return replacement;
 }
 
+/* The owner's own punctuation habits travel with the swap: if they write
+   "front-of-house", the listing's "front of house" arrives hyphenated. */
+function matchStyle(found, replacement) {
+  const hyphenated = /[A-Za-z0-9]-[A-Za-z0-9]/.test(found);
+  const spaced = /[A-Za-z0-9] [A-Za-z0-9]/.test(found);
+  if (hyphenated && !spaced) return replacement.replace(/ /g, '-');
+  if (spaced && !hyphenated) return replacement.replace(/-/g, ' ');
+  return replacement;
+}
+
+/* An all-capitals line is a section heading: structure, not prose. The
+   engine rewords what the person wrote, never the shape of their CV. */
+const isHeadingLine = (text) => {
+  const words = text.trim().split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
+  return words.length > 0 && words.length <= 5 && !/[a-z]/.test(text);
+};
+
 /* A short line whose every word is capitalised is a heading or a skill-list
    entry, not a proper-noun run. */
 const isTitleLine = (text) => {
@@ -59,6 +76,7 @@ export function buildProposals(lines, jdText, jobUrl) {
   let seq = 0;
   const dupRe = /\b([A-Za-z]+) \1\b/i;
   const add = (line, kind, find, replace, why, opts = {}) => {
+    if (isHeadingLine(line.text)) return;
     const m = find.exec(line.text);
     find.lastIndex = 0;
     if (!m) return;
@@ -70,7 +88,7 @@ export function buildProposals(lines, jdText, jobUrl) {
       const prevWord = before.split(/\s+/).pop() || '';
       if (!/[.!?:]$/.test(before) && (/^[A-Z][a-z]/.test(nextWord) || /^[A-Z][a-z]/.test(prevWord))) return;
     }
-    const replaced = line.text.replace(find, (f) => matchCase(f, replace));
+    const replaced = line.text.replace(find, (f) => matchCase(f, matchStyle(f, replace)));
     if (replaced === line.text) return;
     if (dupRe.test(replaced) && !dupRe.test(line.text)) return;   /* "service service" */
     proposals.push({ id: `p${++seq}`, lineId: line.id, kind, findSrc: find.source, replace, why, before: line.text, after: replaced, ...opts });
@@ -220,8 +238,8 @@ export function tailorSentences(lines, jdText, jobUrl) {
         const m = re.exec(text);
         if (!m) return;
         re.lastIndex = 0;
-        changes.push({ from: m[0], to: matchCase(m[0], choice), why: p.why, kind: p.kind });
-        text = text.replace(re, (f) => matchCase(f, choice));
+        changes.push({ from: m[0], to: matchCase(m[0], matchStyle(m[0], choice)), why: p.why, kind: p.kind });
+        text = text.replace(re, (f) => matchCase(f, matchStyle(f, choice)));
       });
       if (seen.has(text)) continue;
       seen.add(text);
@@ -256,7 +274,7 @@ export function applyProposals(lines, proposals, tickedIds) {
   const picked = proposals.filter((p) => tickedIds.has(p.id)).sort((a, b) => order[a.kind] - order[b.kind]);
   for (const p of picked) {
     const re = new RegExp(p.findSrc, 'gi');
-    texts.set(p.lineId, texts.get(p.lineId).replace(re, (f) => matchCase(f, p.replace)));
+    texts.set(p.lineId, texts.get(p.lineId).replace(re, (f) => matchCase(f, matchStyle(f, p.replace))));
   }
   return texts;
 }

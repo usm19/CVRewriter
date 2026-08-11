@@ -2,6 +2,7 @@
 import { decomposePdf, registerFonts } from './engine/pdf-extract.js';
 import { buildTemplateHtml, lineFits, guessOwnerName } from './engine/render.js';
 import { tailorSentences, sentenceTexts, applyProposals } from './engine/tailor.js';
+import { jobFromJsonLd, cleanJobText, looksLikeBlock } from './engine/jobtext.js';
 import { createProfileKeys, unlockDek, encryptJson, decryptJson, sessionValid, SESSION_DAYS } from './crypto.js';
 
 const JD_MAX = 28000;
@@ -170,24 +171,56 @@ async function fetchWithTimeout(url, opts = {}, ms = 25000) {
   try { return await fetch(url, { ...opts, signal: ctl.signal }); }
   finally { clearTimeout(t); }
 }
+/* Pull the listing out of fetched HTML: the JobPosting block first, then the
+   readable body, then the page with its furniture stripped. */
+function readListing(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const s of doc.querySelectorAll('script[type="application/ld+json"]')) {
+    const job = jobFromJsonLd(s.textContent);
+    if (job && job.text.length > 200) return job.text;
+  }
+  doc.querySelectorAll('script,style,noscript,nav,footer,header,aside,form,svg,iframe,[aria-hidden="true"]').forEach((n) => n.remove());
+  const main = doc.querySelector('main,[role="main"],article,#job-description,.job-description,#vacancy,.vacancy') || doc.body;
+  return cleanJobText(main?.innerText || main?.textContent || '');
+}
+
+/* Read-only proxies, raced rather than queued: whichever answers first with
+   something that reads like a listing wins. Job boards block them
+   unpredictably, so more routes means fewer dead ends. */
+const ROUTES = [
+  { url: (u) => `https://r.jina.ai/${u}`, parse: (t) => cleanJobText(t) },
+  { url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, parse: readListing },
+  { url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, parse: readListing },
+  { url: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`, parse: readListing },
+  { url: (u) => `https://api.allorigins.win/raw?charset=UTF-8&url=${encodeURIComponent(u)}`, parse: readListing },
+];
+
 async function fetchJobText(jobUrl) {
-  try {
-    const r = await fetchWithTimeout(`https://r.jina.ai/${jobUrl}`, { headers: { Accept: 'text/plain' } });
-    if (r.ok) {
-      const text = (await r.text()).trim();
-      if (text.length > 200) return text.slice(0, JD_MAX);
-    }
-  } catch { /* fall through */ }
-  try {
-    const r = await fetchWithTimeout(`https://api.allorigins.win/raw?url=${encodeURIComponent(jobUrl)}`);
-    if (r.ok) {
-      const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
-      doc.querySelectorAll('script,style,noscript,nav,footer,header').forEach((n) => n.remove());
-      const text = (doc.body?.textContent || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-      if (text.length > 200) return text.slice(0, JD_MAX);
-    }
-  } catch { /* fall through */ }
-  return null;
+  const attempt = async ({ url, parse }) => {
+    const r = await fetchWithTimeout(url(jobUrl), { headers: { Accept: 'text/html,text/plain' } }, 18000);
+    if (!r.ok) throw new Error(`http ${r.status}`);
+    const raw = await r.text();
+    if (looksLikeBlock(raw)) throw new Error('bot-check');
+    const text = parse(raw);
+    if (!text || text.length < 200 || looksLikeBlock(text)) throw new Error('too little');
+    return text.slice(0, JD_MAX);
+  };
+  /* Promise.any resolves on the first success and ignores the failures. */
+  try { return await Promise.any(ROUTES.map(attempt)); }
+  catch { return null; }
+}
+
+/* ---------- capture from the page you are already on ---------- */
+/* Sites behind a log-in or a bot check will never answer a proxy, but the
+   person's own browser is already past it. The bookmarklet reads the job
+   text off the page they are looking at and hands it straight over. */
+const BOOKMARKLET = `javascript:(function(){var d=document,j=null;d.querySelectorAll('script[type="application/ld+json"]').forEach(function(s){if(j)return;try{var o=JSON.parse(s.textContent);var f=function(n,k){if(!n||typeof n!=='object'||k>5)return null;if(Array.isArray(n)){for(var i=0;i<n.length;i++){var h=f(n[i],k+1);if(h)return h}return null}if([].concat(n['@type']||[]).indexOf('JobPosting')>=0)return n;return f(n['@graph'],k+1)||f(n.mainEntity,k+1)};var p=f(o,0);if(p)j=[p.title||'',(p.hiringOrganization&&p.hiringOrganization.name)||'',p.description||''].join('\\n')}catch(e){}});var t=j?j.replace(/<[^>]+>/g,' '):((d.querySelector('main,[role=main],article')||d.body).innerText||'');t=(d.title+'\\n\\n'+t).replace(/\\s*\\n\\s*/g,'\\n').slice(0,24000);location.href='${location.origin}${location.pathname}#jd='+encodeURIComponent(t)})()`;
+
+function readSharedJd() {
+  const m = /[#&]jd=([^&]+)/.exec(location.hash);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  try { return cleanJobText(decodeURIComponent(m[1])).slice(0, JD_MAX); } catch { return null; }
 }
 
 /* ---------- step gating ---------- */
@@ -288,7 +321,13 @@ $('btn-approve').onclick = async () => {
 $('btn-recv').onclick = () => $('in-cv').click();
 
 /* ---------- step 2: tailor ---------- */
-$('btn-paste-toggle').onclick = () => show($('paste-wrap'), $('paste-wrap').hidden);
+$('btn-paste-toggle').onclick = () => {
+  show($('paste-wrap'), $('paste-wrap').hidden);
+  show($('capture-wrap'), !$('paste-wrap').hidden);
+};
+/* the bookmarklet is a link the person drags to their bookmarks bar */
+$('bkmk').setAttribute('href', BOOKMARKLET);
+$('bkmk').onclick = (e) => { e.preventDefault(); toast('Drag this to your bookmarks bar, then click it on a job page.'); };
 
 $('btn-tailor').onclick = async () => {
   const jobUrl = $('in-job').value.trim();
@@ -308,7 +347,8 @@ $('btn-tailor').onclick = async () => {
       jd = await fetchJobText(jobUrl);
       if (!jd) {
         show($('paste-wrap'));
-        throw new Error('That page would not let CVRewriter read it (job boards often block robots). Copy the listing text and paste it instead.');
+        show($('capture-wrap'));
+        throw new Error('That site blocks automated readers (Civil Service Jobs and NHS Jobs both do). Use the "Grab from this page" button below, or paste the listing text.');
       }
     }
     statusShow('tailor-status', 'Matching the listing against your CV...');
@@ -764,6 +804,21 @@ new IntersectionObserver(([e]) => {
   $('masthead').classList.toggle('scrolled', !e.isIntersecting);
 }).observe($('top-sentinel'));
 
+/* Accept a captured listing on first load and while the tab is open: the
+   bookmarklet may fire at a tab that already has CVRewriter in it, which
+   changes only the fragment and never reloads the page. */
+function useSharedJd(jd) {
+  if (!jd || !S.user) return;
+  show($('paste-wrap'));
+  show($('capture-wrap'));
+  $('in-jobtext').value = jd;
+  toast('Listing captured. Tailor when you are ready.');
+  $('step-tailor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+addEventListener('hashchange', () => useSharedJd(readSharedJd()));
+
+const sharedJd = readSharedJd();
+
 (async function init() {
   const session = await db.get('session');
   const profiles = await db.profAll();
@@ -775,5 +830,6 @@ new IntersectionObserver(([e]) => {
     if (session) await db.del('session');
     await renderAuth();
   }
+  useSharedJd(sharedJd);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

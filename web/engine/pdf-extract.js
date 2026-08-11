@@ -99,7 +99,10 @@ async function decompose(doc) {
   const lines = [];
   for (const r of runs) {
     const line = lines.length ? lines[lines.length - 1] : null;
-    if (line && Math.abs(r.baseline - line.baseline) < Math.max(line.size, r.size) * 0.45) {
+    /* line.size is only worked out further down, so the tolerance comes from
+       the runs themselves: a run sitting on the same baseline as the line it
+       follows belongs to that line, however it is styled. */
+    if (line && Math.abs(r.baseline - line.baseline) < Math.max(line.items[0].size, r.size) * 0.45) {
       line.items.push(r);
       line.baseline = (line.baseline * (line.items.length - 1) + r.baseline) / line.items.length;
     } else {
@@ -185,7 +188,7 @@ async function decompose(doc) {
     pageW, pageH, bgDataUrl, fonts, meta,
     lines: lines.map(({ id, left, top, width, height, size, fontName, fallback, color, text, items }) => ({
       id, left, top, width, height, size, fontName, fallback, color, text,
-      items: items.map(({ str, left: l, top: t, size: s, fontName: f, fallback: fb }) => ({ str, left: l, top: t, size: s, fontName: f, fallback: fb })),
+      items: items.map(({ str, left: l, top: t, width: w, size: s, fontName: f, fallback: fb }) => ({ str, left: l, top: t, w, size: s, fontName: f, fallback: fb })),
     })),
   };
 }

@@ -1,7 +1,7 @@
 'use strict';
-const CACHE = 'cvrewriter-v7';
+const CACHE = 'cvrewriter-v8';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './crypto.js',
-  './engine/rules.js', './engine/nlp.js', './engine/tailor.js', './engine/render.js', './engine/pdf-extract.js', './engine/voice.js',
+  './engine/rules.js', './engine/nlp.js', './engine/tailor.js', './engine/render.js', './engine/pdf-extract.js', './engine/voice.js', './engine/jobtext.js', './engine/runs.js',
   './vendor/pdf.min.mjs', './vendor/pdf.worker.min.mjs', './fonts/outfit-latin-wght-normal.woff2',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-512-maskable.png', './icons/icon-180.png', './icons/favicon.svg'];
 

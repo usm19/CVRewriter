@@ -653,3 +653,19 @@ dialog h2 { margin-bottom: 8px; }
   body, .card, .masthead { transition: none; }
   .preview-frame iframe { transition: none; opacity: 1; }
 }
+
+/* ---------- capture-from-page ---------- */
+.bkmk {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+  border-radius: 8px;
+  padding: 3px 10px;
+  text-decoration: none;
+  cursor: grab;
+  box-shadow: var(--shadow-accent);
+}
+.bkmk:active { cursor: grabbing; }
+#capture-wrap { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
